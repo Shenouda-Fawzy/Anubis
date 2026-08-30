@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -58,12 +59,16 @@ func (c *Client) do(ctx context.Context, method, path string, accept string, req
 		if err != nil {
 			return err
 		}
+		log.Printf("ReqBody: %s\n", string(data))
+
 		body = bytes.NewReader(data)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(c.BaseURL, "/")+path, body)
 	if err != nil {
 		return err
 	}
+	log.Printf("URL: %s %s\n", method, path)
+	log.Println("token=", c.Token)
 	req.Header.Set("Accept", accept)
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	if requestBody != nil {
@@ -78,11 +83,13 @@ func (c *Client) do(ctx context.Context, method, path string, accept string, req
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		log.Printf("API error response= %v", err)
 		return err
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
+		log.Printf("error response= %v", err)
 		return err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -91,16 +98,21 @@ func (c *Client) do(ctx context.Context, method, path string, accept string, req
 	if responseBody != nil && len(data) > 0 {
 		return json.Unmarshal(data, responseBody)
 	}
+	log.Println("Resp body=", string(data))
 	return nil
 }
 
 func (c *Client) GetPullRequest(ctx context.Context, owner, repo string, number int) (PullRequest, error) {
 	var pr PullRequest
+	log.Println("GetPullRequest started")
+	defer log.Println("GetPullRequest done")
 	err := c.do(ctx, http.MethodGet, fmt.Sprintf("/repos/%s/%s/pulls/%d", owner, repo, number), "application/vnd.github+json", nil, &pr)
 	return pr, err
 }
 
 func (c *Client) GetDiff(ctx context.Context, owner, repo string, number int) (string, error) {
+	log.Println("GetDiff started")
+	defer log.Println("GetDiff done")
 	var data []byte
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(c.BaseURL, "/")+fmt.Sprintf("/repos/%s/%s/pulls/%d", owner, repo, number), nil)
 	if err != nil {
@@ -131,6 +143,8 @@ func (c *Client) GetDiff(ctx context.Context, owner, repo string, number int) (s
 }
 
 func (c *Client) ListFiles(ctx context.Context, owner, repo string, number int) ([]File, error) {
+	log.Println("ListFiles started")
+	defer log.Println("ListFiles done")
 	var all []File
 	for page := 1; ; page++ {
 		var files []File
@@ -146,10 +160,14 @@ func (c *Client) ListFiles(ctx context.Context, owner, repo string, number int) 
 }
 
 func (c *Client) CreateComment(ctx context.Context, owner, repo string, number int, body string) error {
+	log.Println("CreateComment started")
+	defer log.Println("CreateComment done")
 	return c.do(ctx, http.MethodPost, fmt.Sprintf("/repos/%s/%s/issues/%d/comments", owner, repo, number), "application/vnd.github+json", map[string]string{"body": body}, nil)
 }
 
 func (c *Client) PublishReview(ctx context.Context, owner, repo string, number int, review domain.Review) error {
+	log.Println("PublishReview started")
+	defer log.Println("PublishReview done")
 	var b strings.Builder
 	b.WriteString("## Anubis review\n\n")
 	b.WriteString(review.Summary)

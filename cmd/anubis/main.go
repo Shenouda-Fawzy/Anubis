@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -16,6 +17,7 @@ import (
 )
 
 func main() {
+	log.SetFlags(log.Llongfile | log.Ltime)
 	repo := flag.String("repo", os.Getenv("GITHUB_REPOSITORY"), "repository in owner/name form")
 	prNumber := flag.Int("pr", 0, "pull request number")
 	agentDir := flag.String("agents", "", "directory containing Markdown agents")
@@ -32,7 +34,7 @@ func main() {
 	if len(parts) != 2 {
 		fatal("-repo must be owner/name")
 	}
-	llmClient := llm.NewOpenAIClient(envOr("OPENCODE_API_KEY", os.Getenv("OPENAI_API_KEY")), *baseURL, *model)
+	llmClient := llm.NewOpenAIClient(envOr("OPENCODE_API_KEY", envOr("OPENAI_API_KEY", os.Getenv("GEMINI_API_KEY"))), *baseURL, *model)
 	var markdown []*agents.MarkdownAgent
 	var err error
 	if *agentDir != "" {
@@ -42,8 +44,11 @@ func main() {
 		}
 	}
 	if len(markdown) == 0 {
+		// TODO:
+		// 	- Built in agent should be reading from the agents/ directory
 		markdown = agents.BuiltinAgents(llmClient)
 	}
+	log.Printf("Parts=%s, Repo=%s", parts[0], parts[1])
 	api := github.NewClient(*token, *githubBaseURL)
 	ctx := context.Background()
 	pr, err := api.GetPullRequest(ctx, parts[0], parts[1], *prNumber)
@@ -54,11 +59,12 @@ func main() {
 	if err != nil {
 		fatal(err.Error())
 	}
-	var domainAgents = make([]domain.Agent, len(markdown))
+	domainAgents := make([]domain.Agent, len(markdown))
 	for i := range markdown {
 		domainAgents[i] = markdown[i]
 	}
-	review, err := orchestrator.New(domainAgents, llmClient).Review(ctx, domain.ReviewInput{Repository: *repo, PullNumber: *prNumber, Title: pr.Title, Body: pr.Body, Diff: diff})
+	orchestra := orchestrator.New(domainAgents, llmClient)
+	review, err := orchestra.Review(ctx, domain.ReviewInput{Repository: *repo, PullNumber: *prNumber, Title: pr.Title, Body: pr.Body, Diff: diff})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "warning:", err)
 	}

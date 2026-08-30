@@ -25,6 +25,6 @@ Flow: load agents → each returns `[]Finding` → dedupe → summary synthesis 
 - Agent markdown has optional YAML front matter starting exactly with `---\n`. Alias fields: `system`↔`system_prompt`, `prompt`↔`user_prompt`↔`review_prompt`. `enabled: false` drops the file. Missing values get safe defaults (`withDefaults` in `pkg/agents/markdown.go`).
 - Models must return a JSON array of findings; `ParseFindings` tolerates ```json fences and surrounding prose.
 - If `-agents` is unset or the dir yields no enabled agents, built-in agents (security/performance/coding-standards) run instead.
-- Models default to OpenCode Zen's free `big-pickle` model (`-llm-base-url` `https://opencode.ai/zen/v1`, `OPENCODE_API_KEY`, fallback `OPENAI_API_KEY`). See `llm.DefaultBaseURL`/`llm.DefaultModel`.
-- Env: `GITHUB_TOKEN`, `OPENCODE_API_KEY`; flags `-repo`/`GITHUB_REPOSITORY`, `-github-base-url`/`GITHUB_API_URL`, `-model`/`ANUBIS_MODEL` (default `big-pickle`), `-llm-base-url`/`ANUBIS_LLM_BASE_URL` (default `https://opencode.ai/zen/v1`).
+- Models default to OpenCode Zen's free `big-pickle` model (`-llm-base-url` `https://opencode.ai/zen/v1`). Any OpenAI-compatible endpoint works, e.g. Google Gemini free tier (`https://generativelanguage.googleapis.com/v1beta/openai`). API key is `OPENCODE_API_KEY`, falling back to `OPENAI_API_KEY`, then `GEMINI_API_KEY`.
+- Env: `GITHUB_TOKEN`, `OPENCODE_API_KEY`; flags `-repo`/`GITHUB_REPOSITORY`, `-github-base-url`/`GITHUB_API_URL`, `-model`/`ANUBIS_MODEL` (default `big-pickle`), `-llm-base-url`/`ANUBIS_LLM_BASE_URL` (default `https://opencode.ai/zen/v1`). See `llm.DefaultBaseURL`/`llm.DefaultModel`.
 - `go.mod` requires the 1.26.x toolchain.

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 )
@@ -47,6 +48,8 @@ type completionResponse struct {
 }
 
 func (c *OpenAIClient) Complete(ctx context.Context, req CompletionRequest) (CompletionResponse, error) {
+	log.Println("LLM Complete started")
+	defer log.Println("LLM Complete Done")
 	if c == nil {
 		return CompletionResponse{}, fmt.Errorf("llm: nil client")
 	}
@@ -68,6 +71,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, req CompletionRequest) (Com
 	if !strings.HasSuffix(url, "/chat/completions") {
 		url += "/chat/completions"
 	}
+	log.Println("LLM Request=", string(body))
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return CompletionResponse{}, fmt.Errorf("llm: create request: %w", err)
@@ -88,6 +92,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, req CompletionRequest) (Com
 	if err != nil {
 		return CompletionResponse{}, fmt.Errorf("llm: read response: %w", err)
 	}
+	log.Println("LLM Response=", string(data))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return CompletionResponse{}, fmt.Errorf("llm: HTTP %s: %s", resp.Status, strings.TrimSpace(string(data)))
 	}
