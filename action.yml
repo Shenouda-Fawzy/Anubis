@@ -1,0 +1,59 @@
+name: 'Anubis PR review'
+description: 'Concurrent, extensible pull-request review using Markdown review agents and an OpenAI-compatible model.'
+author: 'Shenouda Fawzy'
+branding:
+  icon: 'shield'
+  color: 'purple'
+inputs:
+  github-token:
+    description: 'GitHub token with pull-request write access.'
+    required: false
+    default: ${{ github.token }}
+  repo:
+    description: 'Repository in owner/name form.'
+    required: false
+    default: ${{ github.repository }}
+  pr:
+    description: 'Pull request number to review.'
+    required: false
+    default: ${{ github.event.pull_request.number || '0' }}
+  publish:
+    description: 'Publish the review as a PR comment.'
+    required: false
+    default: 'true'
+  agents-dir:
+    description: 'Directory containing Markdown review agents (relative to the workspace). Leave empty for built-in agents.'
+    required: false
+    default: ''
+  model:
+    description: 'Chat model identifier.'
+    required: false
+    default: 'big-pickle'
+  llm-base-url:
+    description: 'OpenAI-compatible chat completions base URL.'
+    required: false
+    default: 'https://opencode.ai/zen/v1'
+  github-base-url:
+    description: 'GitHub API base URL. Leave empty for github.com; set for GitHub Enterprise.'
+    required: false
+    default: ''
+  opencode-api-key:
+    description: 'OpenCode Zen API key (also accepts any OpenAI-compatible Bearer token).'
+    required: false
+    default: ''
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  env:
+    GITHUB_TOKEN: ${{ inputs.github-token }}
+    GITHUB_REPOSITORY: ${{ inputs.repo }}
+    ANUBIS_LLM_BASE_URL: ${{ inputs.llm-base-url }}
+    ANUBIS_MODEL: ${{ inputs.model }}
+    OPENCODE_API_KEY: ${{ inputs.opencode-api-key }}
+    GITHUB_API_URL: ${{ inputs.github-base-url || github.api_url }}
+  args:
+    - -pr
+    - ${{ inputs.pr }}
+    - -publish=${{ inputs.publish }}
+    - -agents
+    - ${{ inputs.agents-dir }}

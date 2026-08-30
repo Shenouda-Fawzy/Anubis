@@ -8,9 +8,10 @@ a pull-request comment.
 ## Quick start
 
 ```sh
+make build          # static ./anubis binary (or: go run ./cmd/anubis ...)
 export GITHUB_TOKEN=...
 export OPENCODE_API_KEY=...
-go run ./cmd/anubis -repo owner/project -pr 42 -publish
+./anubis -repo owner/project -pr 42 -publish
 ```
 
 Models come from [OpenCode Zen](https://opencode.ai/docs/zen/), with the free
@@ -40,6 +41,73 @@ go run ./cmd/anubis -repo owner/project -pr 42 \
 `OPENAI_API_KEY` and `GEMINI_API_KEY` are also honored as Bearer-token
 fallbacks. Use `-model`/`-llm-base-url` (or `ANUBIS_MODEL`/`ANUBIS_LLM_BASE_URL`)
 for any other provider, e.g. Ollama at `http://localhost:11434/v1`.
+
+## GitHub Action
+
+Anubis ships as a Docker-container GitHub Action. Add it to any workflow that
+handles `pull_request` events:
+
+```yaml
+name: Anubis review
+on:
+  pull_request:
+permissions:
+  pull-requests: write
+  contents: read
+jobs:
+  anubis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: Shenouda-Fawzy/Anubis@v1
+        with:
+          opencode-api-key: ${{ secrets.OPENCODE_API_KEY }}
+```
+
+The review is published as a PR comment by default; set `publish: false` to
+opt out. No checkout is required for the built-in agents. To use custom
+Markdown agents, add `actions/checkout@v4` and point `agents-dir` at a
+directory committed to the consumer repo (for example `.github/anubis/agents`).
+
+| Input | Default | Purpose |
+| --- | --- | --- |
+| `github-token` | `github.token` | Token; needs `pull-requests: write` to publish. |
+| `repo` | `github.repository` | Repository as `owner/name`. |
+| `pr` | PR number from the event | Pull request to review. |
+| `publish` | `true` | Publish the review as a PR comment. |
+| `agents-dir` | *(empty)* | Directory of Markdown agents; built-ins used when empty. |
+| `model` | `big-pickle` | Chat model identifier. |
+| `llm-base-url` | `https://opencode.ai/zen/v1` | OpenAI-compatible chat endpoint. |
+| `github-base-url` | `github.api_url` | GitHub API base; set for GitHub Enterprise. |
+| `opencode-api-key` | *(empty)* | Bearer token for the model endpoint. |
+
+Notes:
+
+- Secrets cannot be read inside `action.yml`; pass the API key via
+  `with: opencode-api-key: ${{ secrets.OPENCODE_API_KEY }}` (or any
+  OpenAI-compatible key / Gemini key).
+- On `pull_request` from forks, repo secrets are not exposed. Use
+  `pull_request_target` only if you need the action to run on fork PRs and
+  understand the code-execution implications.
+- GitHub builds the image from this repo's `Dockerfile` on each run (no
+  registry needed). For a local smoke test:
+
+  ```sh
+  docker build -t anubis .
+  docker run --rm \
+    -e GITHUB_TOKEN=... -e GITHUB_REPOSITORY=owner/project \
+    -e OPENCODE_API_KEY=... \
+    anubis -pr 42 -publish=true
+  ```
+
+## Examples
+
+Copy-paste ready templates live in [`examples/`](examples/):
+
+- `examples/anubis-custom-agents.yml` — GitHub Action that reviews with custom
+  Markdown agents loaded from a directory (`agents-dir`).
+- `examples/agents/` — sample agent files to drop into your repo.
+- `examples/review.sh` — run the same agents locally via the CLI.
+- See `examples/README.md` for setup steps and the fork-PR caveat.
 
 ## Markdown agents
 
