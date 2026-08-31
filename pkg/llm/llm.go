@@ -12,7 +12,9 @@ type CompletionRequest struct {
 	Model       string    `json:"model,omitempty"`
 	Messages    []Message `json:"messages"`
 	Temperature *float64  `json:"temperature,omitempty"`
-	MaxTokens   int       `json:"max_tokens,omitempty"`
+
+	// Dictates how many tokens the model can return to you as visible text output
+	MaxTokens int `json:"max_tokens,omitempty"`
 }
 
 type CompletionResponse struct {

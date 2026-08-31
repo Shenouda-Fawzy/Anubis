@@ -142,7 +142,7 @@ func (m *Master) synthesize(ctx context.Context, input domain.ReviewInput, findi
 	response, err := m.Client.Complete(ctx, llm.CompletionRequest{Messages: []llm.Message{
 		{Role: "system", Content: "You summarize code review findings concisely and accurately."},
 		{Role: "user", Content: fmt.Sprintf("Summarize these findings for a pull request. Do not add new claims.\nContext: %s\nFindings JSON: %s", input.Title, data)},
-	}, MaxTokens: 512})
+	}, MaxTokens: 2048})
 	if err != nil {
 		return "", fmt.Errorf("synthesis: %w", err)
 	}

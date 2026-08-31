@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -74,9 +75,10 @@ func (c *Client) do(ctx context.Context, method, path string, accept string, req
 	if requestBody != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if c.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.Token)
+	if c.Token == "" {
+		return errors.New("missing token - forgot to set GITHUB_TOKEN")
 	}
+	req.Header.Set("Authorization", "Bearer "+c.Token)
 	client := c.HTTPClient
 	if client == nil {
 		client = http.DefaultClient
