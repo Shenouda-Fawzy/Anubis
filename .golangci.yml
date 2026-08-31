@@ -1,0 +1,38 @@
+version: "2"
+
+# https://golangci-lint.run/usage/configuration/#linters-configuration
+linters:
+    default: none # Disable all linters except the ones listed below
+    enable: # Specific linters to enable
+        - gosec             # Scans Go AST/SSA for common security issues
+        - gocritic          # Diagnostics for bugs, performance and style
+        - govet             # Standard Go vet for suspicious constructs
+        - staticcheck       # High-signal checks from the staticcheck suite
+        - unused            # Flags unused variables, constants, functions, types
+        - predeclared       # Detects shadowing of Go's predeclared identifiers
+        - misspell          # Finds common spelling mistakes in comments
+        - errcheck          # Detects unchecked errors from function calls
+        - sqlclosecheck     # Ensures SQL statements and rows are properly closed
+        - errorlint         # Flags improper error formatting (e.g. missing %w)
+    settings:
+        gocritic:
+            disabled-checks:
+                - commentFormatting  # Ignores spacing/style issues in comments (e.g. lack of space after `//`)
+                - ifElseChain        # Allows long if-else chains instead of enforcing switch conversion
+                - singleCaseSwitch   
+        staticcheck:
+            # https://golangci-lint.run/usage/linters/
+            checks:
+                - all
+                # Exclude the following linters
+                - -S1002 # Omit comparison with boolean constant
+                - -S1008 # Simplify returning boolean expression
+                - -ST1020 # The documentation of an exported function should start with the function's name.
+                - -ST1021 # The documentation of an exported type should start with type's name
+                - -ST1022 # The documentation of an exported var should start with var's name
+    exclusions:
+        paths:
+            - vendor
+
+run:
+    timeout: 15m
