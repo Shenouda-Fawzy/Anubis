@@ -44,8 +44,6 @@ func main() {
 		}
 	}
 	if len(markdown) == 0 {
-		// TODO:
-		// 	- Built in agent should be reading from the agents/ directory
 		markdown = agents.BuiltinAgents(llmClient)
 	}
 	log.Printf("Parts=%s, Repo=%s", parts[0], parts[1])
