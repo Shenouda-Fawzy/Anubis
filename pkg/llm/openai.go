@@ -85,11 +85,13 @@ func (c *OpenAIClient) Complete(ctx context.Context, req CompletionRequest) (Com
 	}
 	resp, err := httpClient.Do(httpReq)
 	if err != nil {
+		log.Println(err)
 		return CompletionResponse{}, fmt.Errorf("llm: request: %w", err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
+		log.Println(err)
 		return CompletionResponse{}, fmt.Errorf("llm: read response: %w", err)
 	}
 	log.Println("LLM Response=", string(data))

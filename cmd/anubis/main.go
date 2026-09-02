@@ -64,7 +64,7 @@ func main() {
 	if len(markdown) == 0 {
 		markdown = agents.BuiltinAgents(llmClient)
 	}
-	log.Printf("Parts=%s, Repo=%s\n", parts[0], parts[1])
+	log.Printf("Owner Name=%s, Repo=%s\n", parts[0], parts[1])
 	api := github.NewClient(githubToken, githubBaseURL)
 	ctx := context.Background()
 	pr, err := api.GetPullRequest(ctx, parts[0], parts[1], pullReqNum)
