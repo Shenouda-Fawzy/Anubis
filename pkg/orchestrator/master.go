@@ -74,7 +74,7 @@ func (m *Master) Review(ctx context.Context, input domain.ReviewInput) (domain.R
 	}
 	sort.Slice(ordered, func(i, j int) bool { return ordered[i].index < ordered[j].index })
 	review := domain.Review{Findings: deduplicate(ordered)}
-	review.Approved = !hasBlocking(review.Findings)
+	review.Approved = hasBlocking(review.Findings) == false
 	if m.Client != nil {
 		summary, err := m.synthesize(ctx, input, review.Findings)
 		if err != nil {
@@ -141,7 +141,7 @@ func (m *Master) synthesize(ctx context.Context, input domain.ReviewInput, findi
 	}
 	response, err := m.Client.Complete(ctx, llm.CompletionRequest{Messages: []llm.Message{
 		{Role: "system", Content: "You summarize code review findings concisely and accurately."},
-		{Role: "user", Content: fmt.Sprintf("Summarize these findings for a pull request. Do not add new claims.\nContext: %s\nFindings JSON: %s", input.Title, data)},
+		{Role: "user", Content: fmt.Sprintf("Summarize these findings for a pull request, do deduplication of the findings. Do not add new claims.\nContext: %s\nFindings JSON: %s", input.Title, data)},
 	}, MaxTokens: 2048})
 	if err != nil {
 		return "", fmt.Errorf("synthesis: %w", err)

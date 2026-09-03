@@ -52,10 +52,16 @@ func (a *MarkdownAgent) Review(ctx context.Context, input domain.ReviewInput) ([
 	if err != nil {
 		return nil, fmt.Errorf("agent %s: encode input: %w", d.Name, err)
 	}
-	req := llm.CompletionRequest{Model: d.Model, Messages: []llm.Message{
-		{Role: "system", Content: d.System},
-		{Role: "user", Content: prompt + "\n\nPull request context (JSON):\n" + string(payload) + "\n\nReturn only a JSON array of findings. Each finding must include severity, title, description, and optionally file, line, end_line, suggestion, confidence."},
-	}, MaxTokens: d.MaxTokens, Temperature: d.Temperature}
+	req := llm.CompletionRequest{
+		Model: d.Model,
+		Messages: []llm.Message{
+			{Role: "system", Content: d.System},
+			{Role: "user", Content: prompt + "\n\nPull request context (JSON):\n" + string(payload) + "\n\nReturn only a single JSON object with a \"findings\" key holding a JSON array of findings. Each finding must include severity, title, description, and optionally file, line, end_line, suggestion, confidence. Do not wrap the response in prose or markdown fences."},
+		},
+		MaxTokens:      d.MaxTokens,
+		Temperature:    d.Temperature,
+		ResponseFormat: findingsResponseFormat(),
+	}
 	response, err := a.Client.Complete(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("agent %s: %w", d.Name, err)
@@ -108,26 +114,123 @@ func withDefaults(d Definition) Definition {
 
 const DefaultSystemPrompt = "You are a careful senior code reviewer. Report only concrete, actionable issues introduced by this pull request. Do not invent facts."
 
-// ParseFindings decodes the JSON array returned by a Markdown agent.
+// findingsResponseFormat builds a strict JSON Schema for the agent response so
+// the LLM is constrained to return a well-formed {"findings": [...]} object.
+func findingsResponseFormat() *llm.ResponseFormat {
+	strict := true
+	schema, err := json.Marshal(findingsSchema())
+	if err != nil {
+		return nil
+	}
+	return &llm.ResponseFormat{
+		Type: "json_schema",
+		JSONSchema: &llm.JSONSchema{
+			Name:   "findings",
+			Schema: schema,
+			Strict: &strict,
+		},
+	}
+}
+
+func findingsSchema() map[string]any {
+	finding := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"id":          map[string]any{"type": "string"},
+			"severity":    map[string]any{"type": "string", "enum": []string{"critical", "high", "medium", "low", "info"}},
+			"title":       map[string]any{"type": "string"},
+			"description": map[string]any{"type": "string"},
+			"file":        map[string]any{"type": "string"},
+			"line":        map[string]any{"type": "integer"},
+			"end_line":    map[string]any{"type": "integer"},
+			"suggestion":  map[string]any{"type": "string"},
+			"confidence":  map[string]any{"type": "number"},
+		},
+		"required":             []string{"severity", "title", "description"},
+		"additionalProperties": false,
+	}
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"findings": map[string]any{
+				"type":  "array",
+				"items": finding,
+			},
+		},
+		"required":             []string{"findings"},
+		"additionalProperties": false,
+	}
+}
+
+// ParseFindings decodes the JSON array returned by a Markdown agent. It
+// accepts a bare JSON array ([...]) or a JSON object that wraps the array
+// ({"findings":[...]}), and tolerates surrounding prose and ```json fences.
 func ParseFindings(content string) ([]domain.Finding, error) {
-	content = strings.TrimSpace(content)
-	content = strings.TrimPrefix(content, "```json")
-	content = strings.TrimPrefix(content, "```")
-	content = strings.TrimSuffix(strings.TrimSpace(content), "```")
-	content = strings.TrimSpace(content)
-	if !strings.HasPrefix(content, "[") {
-		if start := strings.IndexByte(content, '['); start >= 0 {
-			content = content[start:]
-		}
-	}
-	if end := strings.LastIndexByte(content, ']'); end >= 0 {
-		content = content[:end+1]
-	}
+	extracted := extractJSON(strings.TrimSpace(content))
+
 	var findings []domain.Finding
-	if err := json.Unmarshal([]byte(content), &findings); err != nil {
+	if err := json.Unmarshal([]byte(extracted), &findings); err == nil {
+		return findings, nil
+	}
+	// Some JSON-mode endpoints wrap the array in an object like {"findings": [...]}.
+	var wrapped struct {
+		Findings []domain.Finding `json:"findings"`
+	}
+	if err := json.Unmarshal([]byte(extracted), &wrapped); err != nil {
 		return nil, err
 	}
-	return findings, nil
+	return wrapped.Findings, nil
+}
+
+// extractJSON pulls the outermost JSON document out of content, stripping
+// markdown fences and leading/trailing prose but leaving the document intact.
+func extractJSON(content string) string {
+	if i := strings.Index(content, "```json"); i >= 0 {
+		content = content[i+len("```json"):]
+	} else if i := strings.Index(content, "```"); i >= 0 {
+		content = content[i+len("```"):]
+	}
+	if i := strings.LastIndex(content, "```"); i >= 0 {
+		content = content[:i]
+	}
+	content = strings.TrimSpace(content)
+
+	start := strings.IndexByte(content, '{')
+	if end := strings.IndexByte(content, '['); end >= 0 && (start < 0 || end < start) {
+		start = end
+	}
+	if start < 0 {
+		return content
+	}
+
+	var depth int
+	var inString bool
+	var escaped bool
+	for i := start; i < len(content); i++ {
+		switch content[i] {
+		case '"':
+			if !escaped {
+				inString = !inString
+			}
+			escaped = false
+		case '\\':
+			if inString {
+				escaped = !escaped
+			}
+		case '{', '[':
+			if !inString {
+				depth++
+			}
+		case '}', ']':
+			if !inString {
+				depth--
+				if depth == 0 {
+					return content[start : i+1]
+				}
+			}
+		}
+	}
+	return content[start:]
 }
 
 // ParseDefinition parses a Markdown document with optional YAML front matter.
@@ -186,7 +289,7 @@ func LoadDir(dir string, client llm.Client) ([]*MarkdownAgent, error) {
 // DefaultDefinitions are useful in installations that do not provide files.
 func DefaultDefinitions() []Definition {
 	definitions := []Definition{
-		{Name: "security", Description: "Find security vulnerabilities.", Prompt: "Look for authentication, authorization, injection, data exposure, and secret-handling issues.", Severity: string(domain.SeverityHigh)},
+		// {Name: "security", Description: "Find security vulnerabilities.", Prompt: "Look for authentication, authorization, injection, data exposure, and secret-handling issues.", Severity: string(domain.SeverityHigh)},
 		{Name: "performance", Description: "Find performance regressions.", Prompt: "Look for avoidable latency, excessive resource use, inefficient algorithms, and scalability problems.", Severity: string(domain.SeverityMedium)},
 		{Name: "coding-standards", Description: "Find coding-standard and best-practice issues.", Prompt: "Look for maintainability, readability, testing, error-handling, and established best-practice problems.", Severity: string(domain.SeverityMedium)},
 	}

@@ -59,6 +59,11 @@ func (c *OpenAIClient) Complete(ctx context.Context, req CompletionRequest) (Com
 	if req.Model == "" {
 		return CompletionResponse{}, fmt.Errorf("llm: model is required")
 	}
+	// Force structured JSON output so the returned completion can be unmarshaled
+	// consistently. Callers may override with an explicit ResponseFormat.
+	if req.ResponseFormat == nil {
+		req.ResponseFormat = &ResponseFormat{Type: "json_object"}
+	}
 	body, err := json.Marshal(req)
 	if err != nil {
 		return CompletionResponse{}, fmt.Errorf("llm: encode request: %w", err)
@@ -68,7 +73,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, req CompletionRequest) (Com
 		httpClient = http.DefaultClient
 	}
 	url := strings.TrimRight(c.BaseURL, "/")
-	if !strings.HasSuffix(url, "/chat/completions") {
+	if strings.HasSuffix(url, "/chat/completions") == false {
 		url += "/chat/completions"
 	}
 	log.Println("LLM Request=", string(body))
