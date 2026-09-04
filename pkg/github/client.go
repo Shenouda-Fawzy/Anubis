@@ -54,10 +54,10 @@ func NewClient(token, baseURL string) *Client {
 }
 
 type PullRequest struct {
-	Number  int    `json:"number"`
-	Title   string `json:"title"`
-	Body    string `json:"body"`
-	HTMLURL string `json:"html_url"`
+	Number      int    `json:"number"`
+	Title       string `json:"title"`
+	Description string `json:"body"`
+	HTMLURL     string `json:"html_url"`
 }
 
 type File struct {
@@ -77,10 +77,10 @@ func (c *Client) GetPullRequest(ctx context.Context, owner, repo string, number 
 		return PullRequest{}, err
 	}
 	return PullRequest{
-		Number:  pr.GetNumber(),
-		Title:   pr.GetTitle(),
-		Body:    pr.GetBody(),
-		HTMLURL: pr.GetHTMLURL(),
+		Number:      pr.GetNumber(),
+		Title:       pr.GetTitle(),
+		Description: pr.GetDescription(),
+		HTMLURL:     pr.GetHTMLURL(),
 	}, nil
 }
 

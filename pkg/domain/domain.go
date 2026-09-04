@@ -75,11 +75,11 @@ func (c *Confidence) UnmarshalJSON(data []byte) error {
 
 // ReviewInput is the immutable context supplied to every review agent.
 type ReviewInput struct {
-	Repository string `json:"repository,omitempty"`
-	PullNumber int    `json:"pull_number,omitempty"`
-	Title      string `json:"title,omitempty"`
-	Body       string `json:"body,omitempty"`
-	Diff       string `json:"diff"`
+	Repository    string `json:"repository,omitempty"`
+	PullNumber    int    `json:"pull_number,omitempty"`
+	PrTitle       string `json:"title,omitempty"`
+	PrDescription string `json:"body,omitempty"`
+	PrDiff        string `json:"diff"`
 }
 
 // Review is the result of the complete review.

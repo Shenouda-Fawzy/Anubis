@@ -80,7 +80,7 @@ func main() {
 		specialAgents[i] = markdown[i]
 	}
 	orchestra := orchestrator.New(specialAgents, llmClient)
-	review, err := orchestra.Review(ctx, domain.ReviewInput{Repository: repo, PullNumber: pullReqNum, Title: pr.Title, Body: pr.Body, Diff: diff})
+	review, err := orchestra.Review(ctx, domain.ReviewInput{Repository: repo, PullNumber: pullReqNum, PrTitle: pr.Title, PrDescription: pr.Description, PrDiff: diff})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "warning:", err)
 		return

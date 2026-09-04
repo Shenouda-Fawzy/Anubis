@@ -43,9 +43,6 @@ func (a *SubAgent) IsSet() bool {
 	if a == nil {
 		return false
 	}
-	if *a.Definition.Enabled == false {
-		return false
-	}
 	if a.Definition.Description == "" || a.Definition.Prompt == "" || a.Definition.Model == "" {
 		return false
 	}
@@ -260,7 +257,7 @@ func extractJSON(content string) string {
 // ParseDefinition parses a Markdown document with optional YAML front matter.
 func ParseDefinition(data []byte) (Definition, error) {
 	text := strings.ReplaceAll(string(data), "\r\n", "\n")
-	if !strings.HasPrefix(text, "---\n") {
+	if strings.HasPrefix(text, "---\n") == false {
 		return withDefaults(Definition{Prompt: strings.TrimSpace(text)}), nil
 	}
 	end := strings.Index(text[4:], "\n---")
@@ -277,7 +274,7 @@ func ParseDefinition(data []byte) (Definition, error) {
 }
 
 func LoadFile(path string, client llm.Client) (*SubAgent, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // TODO: must specify the root dir to avoid any path traversal attack (will resolve G304)
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +292,7 @@ func LoadDir(dir string, client llm.Client) ([]*SubAgent, error) {
 	}
 	var result []*SubAgent
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".md") {
+		if entry.IsDir() || strings.HasSuffix(strings.ToLower(entry.Name()), ".md") == false {
 			continue
 		}
 		agent, err := LoadFile(filepath.Join(dir, entry.Name()), client)
