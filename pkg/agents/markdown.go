@@ -31,23 +31,47 @@ type Definition struct {
 	Temperature  *float64 `yaml:"temperature"`
 }
 
-// MarkdownAgent turns a Definition into a domain.Agent.
-type MarkdownAgent struct {
+// Subagent follow OpenAI standard to define agent in markdown format 'agent.md'
+type SubAgent struct {
 	Definition Definition
-	Client     llm.Client
+
+	// Which LLM client this agent will be using
+	Client llm.Client
 }
 
-func (a *MarkdownAgent) Name() string { return a.Definition.Name }
+func (a *SubAgent) IsSet() bool {
+	if a == nil {
+		return false
+	}
+	if *a.Definition.Enabled == false {
+		return false
+	}
+	if a.Definition.Description == "" || a.Definition.Prompt == "" || a.Definition.Model == "" {
+		return false
+	}
+	return true
+}
+func (a *SubAgent) Name() string { return a.Definition.Name }
 
-func (a *MarkdownAgent) Review(ctx context.Context, input domain.ReviewInput) ([]domain.Finding, error) {
+// TODO:
+//   - Remove structured response from sub-agents and keep in the master agent
+//   - Correctly decode response in case of error
+//   - Write unit and integration tests
+//   - Cleanup the agents pkg
+//   - Cleanup the LLM pkg
+//   - Write default reliable agents (include resource manger agent)
+//   - Write a reliable master agent
+//   - Add Timeout for the HTTP clients
+//   - Deploy on the marketplace
+func (a *SubAgent) Review(ctx context.Context, input domain.ReviewInput) ([]domain.Finding, error) {
 	if a == nil || a.Client == nil {
 		return nil, errors.New("agent: an LLM client is required")
 	}
-	d := withDefaults(a.Definition)
-	prompt := strings.TrimSpace(d.Prompt)
-	if prompt == "" {
-		prompt = "Review the pull request diff and report actionable issues."
+	if a.IsSet() == false {
+		return nil, errors.New("invalid agent, please ensure description, prompt and model are set")
 	}
+	d := a.Definition
+	prompt := a.Definition.Prompt
 	payload, err := json.Marshal(input)
 	if err != nil {
 		return nil, fmt.Errorf("agent %s: encode input: %w", d.Name, err)
@@ -252,7 +276,7 @@ func ParseDefinition(data []byte) (Definition, error) {
 	return withDefaults(d), nil
 }
 
-func LoadFile(path string, client llm.Client) (*MarkdownAgent, error) {
+func LoadFile(path string, client llm.Client) (*SubAgent, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -261,15 +285,15 @@ func LoadFile(path string, client llm.Client) (*MarkdownAgent, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	return &MarkdownAgent{Definition: d, Client: client}, nil
+	return &SubAgent{Definition: d, Client: client}, nil
 }
 
-func LoadDir(dir string, client llm.Client) ([]*MarkdownAgent, error) {
+func LoadDir(dir string, client llm.Client) ([]*SubAgent, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
-	var result []*MarkdownAgent
+	var result []*SubAgent
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".md") {
 			continue
@@ -289,7 +313,7 @@ func LoadDir(dir string, client llm.Client) ([]*MarkdownAgent, error) {
 // DefaultDefinitions are useful in installations that do not provide files.
 func DefaultDefinitions() []Definition {
 	definitions := []Definition{
-		// {Name: "security", Description: "Find security vulnerabilities.", Prompt: "Look for authentication, authorization, injection, data exposure, and secret-handling issues.", Severity: string(domain.SeverityHigh)},
+		{Name: "security", Description: "Find security vulnerabilities.", Prompt: "Look for authentication, authorization, injection, data exposure, and secret-handling issues.", Severity: string(domain.SeverityHigh)},
 		{Name: "performance", Description: "Find performance regressions.", Prompt: "Look for avoidable latency, excessive resource use, inefficient algorithms, and scalability problems.", Severity: string(domain.SeverityMedium)},
 		{Name: "coding-standards", Description: "Find coding-standard and best-practice issues.", Prompt: "Look for maintainability, readability, testing, error-handling, and established best-practice problems.", Severity: string(domain.SeverityMedium)},
 	}
@@ -300,11 +324,11 @@ func DefaultDefinitions() []Definition {
 }
 
 // BuiltinAgents constructs the default agents without requiring files on disk.
-func BuiltinAgents(client llm.Client) []*MarkdownAgent {
+func BuiltinAgents(client llm.Client) []*SubAgent {
 	definitions := DefaultDefinitions()
-	result := make([]*MarkdownAgent, len(definitions))
+	result := make([]*SubAgent, len(definitions))
 	for i := range definitions {
-		result[i] = &MarkdownAgent{Definition: definitions[i], Client: client}
+		result[i] = &SubAgent{Definition: definitions[i], Client: client}
 	}
 	return result
 }

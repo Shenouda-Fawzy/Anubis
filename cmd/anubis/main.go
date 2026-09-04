@@ -53,7 +53,7 @@ func main() {
 	llmClient := llm.NewOpenAIClient(envOr("AI_API_KEY", ""), baseURL, model)
 
 	// Load user-provided agents and if not fallback to default agents
-	var markdown []*agents.MarkdownAgent
+	var markdown []*agents.SubAgent
 	var err error
 	if agentDir != "" {
 		markdown, err = agents.LoadDir(agentDir, llmClient)

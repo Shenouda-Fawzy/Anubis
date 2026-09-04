@@ -34,7 +34,7 @@ func TestParseDefinitionDefaultsAndAliases(t *testing.T) {
 
 func TestMarkdownAgentReviewParsesFencedJSON(t *testing.T) {
 	client := &fakeLLM{reply: "```json\n{\"findings\":[{\"title\":\"bug\",\"description\":\"bad\",\"severity\":\"high\",\"file\":\"x.go\",\"line\":3}]}\n```"}
-	agent := &MarkdownAgent{Definition: Definition{Name: "test", Prompt: "review"}, Client: client}
+	agent := &SubAgent{Definition: Definition{Name: "test", Prompt: "review"}, Client: client}
 	findings, err := agent.Review(context.Background(), domain.ReviewInput{Diff: "diff"})
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +70,7 @@ func TestParseFindingsSupportsBareArrayAndWrappedObject(t *testing.T) {
 
 func TestMarkdownAgentReviewUsesStrictJSONSchema(t *testing.T) {
 	client := &fakeLLM{reply: `{"findings":[]}`}
-	agent := &MarkdownAgent{Definition: Definition{Name: "test", Prompt: "review"}, Client: client}
+	agent := &SubAgent{Definition: Definition{Name: "test", Prompt: "review"}, Client: client}
 	if _, err := agent.Review(context.Background(), domain.ReviewInput{Diff: "diff"}); err != nil {
 		t.Fatal(err)
 	}
