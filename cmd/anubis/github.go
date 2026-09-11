@@ -2,13 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 
-	"github.com/Shenouda-Fawzy/Anubis/pkg/domain"
 	ghb "github.com/google/go-github/v90/github"
 )
 
@@ -17,15 +14,6 @@ type Client struct {
 	Token      string
 	HTTPClient *http.Client
 	GhbClient  *ghb.Client
-}
-
-// API is the subset needed by command-line and integrations.
-type API interface {
-	GetPullRequest(context.Context, string, string, int) (PullRequest, error)
-	GetDiff(context.Context, string, string, int) (string, error)
-	ListFiles(context.Context, string, string, int) ([]File, error)
-	CreateComment(context.Context, string, string, int, string) error
-	PublishReview(context.Context, string, string, int, domain.Review) error
 }
 
 func NewGithubClient(token, baseURL string) *Client {
@@ -124,30 +112,4 @@ func (c *Client) CreateComment(ctx context.Context, owner, repo string, number i
 	defer log.Println("CreateComment done")
 	_, _, err := c.GhbClient.Issues.CreateComment(ctx, owner, repo, number, &ghb.IssueComment{Body: ghb.Ptr(body)})
 	return err
-}
-
-func (c *Client) PublishReview(ctx context.Context, owner, repo string, number int, review domain.Review) error {
-	log.Println("PublishReview started")
-	defer log.Println("PublishReview done")
-	var b strings.Builder
-	b.WriteString("## Anubis review\n\n")
-	b.WriteString(review.Summary)
-	b.WriteString("\n\n")
-	if len(review.Findings) > 0 {
-		for _, f := range review.Findings {
-			location := f.File
-			if f.Line > 0 {
-				location += ":" + strconv.Itoa(f.Line)
-			}
-			fmt.Fprintf(&b, "- **%s** %s — %s", f.Severity, f.Title, f.Description)
-			if location != "" {
-				fmt.Fprintf(&b, " (`%s`)", location)
-			}
-			if f.Suggestion != "" {
-				fmt.Fprintf(&b, " Suggestion: %s", f.Suggestion)
-			}
-			b.WriteByte('\n')
-		}
-	}
-	return c.CreateComment(ctx, owner, repo, number, b.String())
 }

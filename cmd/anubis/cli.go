@@ -6,8 +6,6 @@ import (
 	"log"
 	"os"
 	"strings"
-
-	"github.com/Shenouda-Fawzy/Anubis/pkg/llm"
 )
 
 // This will be main entry
@@ -30,8 +28,8 @@ func Review() {
 	flag.StringVar(&repo, "repo", os.Getenv("GITHUB_REPOSITORY"), "repository in 'owner/name' form")
 	flag.IntVar(&pullReqNum, "pr", 0, "pull request number")
 	flag.StringVar(&agentDir, "agents", "", "directory containing Markdown agents")
-	flag.StringVar(&model, "model", envOr("ANUBIS_MODEL", llm.DefaultModel), "chat model")
-	flag.StringVar(&baseURL, "llm-base-url", envOr("ANUBIS_LLM_BASE_URL", llm.DefaultBaseURL), "OpenAI-compatible API base URL (default is OpenCode Zen)")
+	flag.StringVar(&model, "model", envOr("ANUBIS_MODEL", ""), "chat model")
+	flag.StringVar(&baseURL, "llm-base-url", envOr("ANUBIS_LLM_BASE_URL", ""), "OpenAI-compatible API base URL (default is OpenCode Zen)")
 	flag.StringVar(&githubBaseURL, "github-base-url", envOr("GITHUB_API_URL", ""), "GitHub API base URL")
 	flag.StringVar(&githubToken, "github-token", os.Getenv("GITHUB_TOKEN"), "GitHub token")
 	flag.BoolVar(&publishComment, "publish", false, "publish the review as a PR comment")

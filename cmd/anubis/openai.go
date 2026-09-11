@@ -123,6 +123,7 @@ func (o *OpenAIClient) Complete(ctx context.Context, req *CompletionRequest) (*C
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("HTTP Response Status Code = ", resp.Status)
 	defer func() {
 		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
