@@ -79,7 +79,7 @@ type errResponse struct {
 	Message string `json:"message"`
 	Type    string `json:"type"`
 	Param   string `json:"param"`
-	Code    string `json:"code"`
+	Code    int    `json:"code"`
 }
 
 type Choice struct {
@@ -137,19 +137,45 @@ func (o *OpenAIClient) Complete(ctx context.Context, req *CompletionRequest) (*C
 	fmt.Println("*** Resp Body ***")
 	fmt.Println(string(data))
 	fmt.Println("*** End Resp body ***")
-	var d *completionResponse
-	err = json.Unmarshal(data, &d)
+	d, err := ParseResponse(data)
 	if err != nil {
 		log.Println(err)
 		return nil, err
 	}
 	if d.HasError() {
 		log.Println("completion finished with error")
-		return nil, fmt.Errorf("error message=%s, code=%s, type=%s, param=%s", d.Err.Message, d.Err.Code, d.Err.Type, d.Err.Param)
+		return nil, fmt.Errorf("error message=%s, code=%d, type=%s, param=%s", d.Err.Message, d.Err.Code, d.Err.Type, d.Err.Param)
 	}
 	cr := CompletionResponse{
 		Content:      d.TextContent(),
 		FinishReason: d.FinishReason(),
 	}
 	return &cr, nil
+}
+
+func ParseResponse(data []byte) (*completionResponse, error) {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 {
+		return nil, fmt.Errorf("empty response")
+	}
+
+	switch trimmed[0] {
+	case '[':
+		var arr []completionResponse
+		if err := json.Unmarshal(trimmed, &arr); err != nil {
+			return nil, err
+		}
+		if len(arr) == 0 {
+			return nil, fmt.Errorf("empty array response")
+		}
+		return &arr[0], nil
+	case '{':
+		var resp completionResponse
+		if err := json.Unmarshal(trimmed, &resp); err != nil {
+			return nil, err
+		}
+		return &resp, nil
+	default:
+		return nil, fmt.Errorf("unexpected response format")
+	}
 }
