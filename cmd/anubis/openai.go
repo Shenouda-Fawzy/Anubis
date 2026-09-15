@@ -21,6 +21,13 @@ type OpenAIClient struct {
 	HTTPClient   *http.Client
 }
 
+func (o *OpenAIClient) ModelName() string {
+	if o == nil {
+		return ""
+	}
+	return o.Model
+}
+
 func NewOpenAIClient(apiKey, baseURL, model string) *OpenAIClient {
 	return &OpenAIClient{BaseURL: strings.TrimRight(baseURL, "/"), APIKey: apiKey, Model: model, HTTPClient: http.DefaultClient}
 }

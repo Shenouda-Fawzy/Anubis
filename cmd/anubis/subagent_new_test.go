@@ -2,61 +2,42 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
+	"errors"
 	"strings"
 	"testing"
 )
 
-func testAgent(t *testing.T, srv *httptest.Server) *Agent {
-	t.Helper()
-	client := NewOpenAIClient("test-key", srv.URL, "test-model")
-	client.HTTPClient = srv.Client()
+type fakeCompleter struct {
+	result *CompletionResponse
+	err    error
+	gotReq *CompletionRequest
+	ctx    context.Context
+}
+
+func (f *fakeCompleter) Complete(ctx context.Context, req *CompletionRequest) (*CompletionResponse, error) {
+	f.ctx = ctx
+	f.gotReq = req
+	return f.result, f.err
+}
+
+func (f *fakeCompleter) ModelName() string { return "test-model" }
+
+func testAgent(llm ChatCompleter) *Agent {
 	return &Agent{
 		AgentCard: &AgentCard{
 			Name:        "test-agent",
 			Description: "review the diff",
 			Model:       "test-model",
 		},
-		LlmClient: client,
+		LlmClient: llm,
 	}
 }
 
 func TestAgentReviewSuccess(t *testing.T) {
 	const finding = `found a nil-pointer dereference near line 42`
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/chat/completions" {
-			t.Errorf("unexpected path %q", r.URL.Path)
-		}
-		if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
-			t.Errorf("authorization header = %q, want %q", got, "Bearer test-key")
-		}
-		var req CompletionRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Errorf("decode request body: %v", err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		if req.Model != "test-model" {
-			t.Errorf("model = %q, want %q", req.Model, "test-model")
-		}
-		if len(req.Messages) != 2 {
-			t.Fatalf("messages = %d, want 2", len(req.Messages))
-		}
-		if req.Messages[0].Role != "system" || req.Messages[0].Content != masterPrompt {
-			t.Error("system message does not contain masterPrompt")
-		}
-		if req.Messages[1].Role != "user" || req.Messages[1].Content != "review the diff" {
-			t.Error("user message does not carry the agent description")
-		}
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"choices":[{"message":{"role":"assistant","content":%q},"finish_reason":"stop"}],"usage":{}}`, finding) //nolint
-	}))
-	defer srv.Close()
+	llm := &fakeCompleter{result: &CompletionResponse{Content: finding, FinishReason: "stop"}}
+	agent := testAgent(llm)
 
-	agent := testAgent(t, srv)
 	if err := agent.Review(context.Background(), &ReviewRequest{}); err != nil {
 		t.Fatalf("Review() error = %v", err)
 	}
@@ -66,16 +47,27 @@ func TestAgentReviewSuccess(t *testing.T) {
 	if agent.ReviewStatus != StatusReviewCompleted {
 		t.Errorf("ReviewStatus = %d, want %d", agent.ReviewStatus, StatusReviewCompleted)
 	}
+	if llm.gotReq == nil {
+		t.Fatal("request was not sent to the client")
+	}
+	if llm.gotReq.Model != "test-model" {
+		t.Errorf("request model = %q, want %q", llm.gotReq.Model, "test-model")
+	}
+	if len(llm.gotReq.Messages) != 2 {
+		t.Fatalf("messages = %d, want 2", len(llm.gotReq.Messages))
+	}
+	if llm.gotReq.Messages[0].Role != "system" || llm.gotReq.Messages[0].Content != masterPrompt {
+		t.Error("system message does not contain masterPrompt")
+	}
+	if llm.gotReq.Messages[1].Role != "user" || llm.gotReq.Messages[1].Content != "review the diff" {
+		t.Error("user message does not carry the agent description")
+	}
 }
 
 func TestAgentReviewIncomplete(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"choices":[{"message":{"role":"assistant","content":"partial"},"finish_reason":"length"}],"usage":{}}`) //nolint
-	}))
-	defer srv.Close()
+	llm := &fakeCompleter{result: &CompletionResponse{Content: "partial", FinishReason: "length"}}
+	agent := testAgent(llm)
 
-	agent := testAgent(t, srv)
 	if err := agent.Review(context.Background(), &ReviewRequest{}); err != nil {
 		t.Fatalf("Review() error = %v", err)
 	}
@@ -84,47 +76,48 @@ func TestAgentReviewIncomplete(t *testing.T) {
 	}
 }
 
-func TestAgentReviewAPIError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"error":{"message":"boom","type":"server_error","param":"","code":500}}`) //nolint
-	}))
-	defer srv.Close()
+func TestAgentReviewLLMError(t *testing.T) {
+	llm := &fakeCompleter{err: errors.New("boom")}
+	agent := testAgent(llm)
 
-	agent := testAgent(t, srv)
 	err := agent.Review(context.Background(), &ReviewRequest{})
-	if err == nil {
-		t.Fatal("Review() error = nil, want API error")
+	if err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("Review() error = %v, want it to contain %q", err, "boom")
 	}
-	if !strings.Contains(err.Error(), "boom") {
-		t.Errorf("Review() error = %q, want it to contain %q", err, "boom")
-	}
-}
-
-func TestAgentReviewInvalidResponse(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		fmt.Fprint(w, "not json") //nolint
-	}))
-	defer srv.Close()
-
-	agent := testAgent(t, srv)
-	if err := agent.Review(context.Background(), &ReviewRequest{}); err == nil {
-		t.Fatal("Review() error = nil, want parse error")
+	if agent.ReviewStatus != 0 {
+		t.Errorf("ReviewStatus = %d, want 0 on error", agent.ReviewStatus)
 	}
 }
 
-func TestAgentReviewContextCancelled(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		<-r.Context().Done()
-	}))
-	defer srv.Close()
+func TestAgentReviewNoContent(t *testing.T) {
+	llm := &fakeCompleter{result: &CompletionResponse{}}
+	agent := testAgent(llm)
 
-	agent := testAgent(t, srv)
+	if err := agent.Review(context.Background(), &ReviewRequest{}); err != nil {
+		t.Fatalf("Review() error = %v", err)
+	}
+	if agent.Finding != "" {
+		t.Errorf("Finding = %q, want empty", agent.Finding)
+	}
+	if agent.ReviewStatus != StatusReviewInComplete {
+		t.Errorf("ReviewStatus = %d, want %d", agent.ReviewStatus, StatusReviewInComplete)
+	}
+}
+
+func TestAgentReviewForwardsContext(t *testing.T) {
+	llm := &fakeCompleter{result: &CompletionResponse{Content: "ok", FinishReason: "stop"}}
+	agent := testAgent(llm)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := agent.Review(ctx, &ReviewRequest{}); err == nil {
-		t.Fatal("Review() error = nil, want context-cancelled error")
+	if err := agent.Review(ctx, &ReviewRequest{}); err != nil {
+		t.Fatalf("Review() error = %v", err)
+	}
+	if llm.ctx == nil {
+		t.Fatal("context was not forwarded to the client")
+	}
+	if err := llm.ctx.Err(); err == nil {
+		t.Error("client received a live context, want the cancelled context")
 	}
 }
 
@@ -147,7 +140,7 @@ func TestAgentReviewNilAgentCard(t *testing.T) {
 func TestAgentReviewMissingModel(t *testing.T) {
 	agent := &Agent{
 		AgentCard: &AgentCard{Description: "review the diff"},
-		LlmClient: NewOpenAIClient("test-key", "http://localhost:1", "test-model"),
+		LlmClient: &fakeCompleter{},
 	}
 	err := agent.Review(context.Background(), &ReviewRequest{})
 	if err == nil || !strings.Contains(err.Error(), "unable to create completion request") {
@@ -156,16 +149,10 @@ func TestAgentReviewMissingModel(t *testing.T) {
 }
 
 func TestAgentReviewNilLlmClient(t *testing.T) {
-	agent := &Agent{
-		AgentCard: &AgentCard{
-			Name:        "test-agent",
-			Description: "review the diff",
-			Model:       "test-model",
-		},
-	}
+	agent := testAgent(nil)
 	err := agent.Review(context.Background(), &ReviewRequest{})
-	if err == nil {
-		t.Fatal("Review() error = nil, want nil-client error")
+	if err == nil || !strings.Contains(err.Error(), "invalid llm client") {
+		t.Fatalf("Review() error = %v, want %q", err, "invalid llm client")
 	}
 }
 

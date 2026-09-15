@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -151,5 +155,113 @@ func TestParseResponseInvalidJSON(t *testing.T) {
 				t.Errorf("ParseResponse(%q) error = %v, want json.SyntaxError", in, err)
 			}
 		}
+	}
+}
+
+const okCompletion = `{"choices":[{"message":{"role":"assistant","content":"all good"},"finish_reason":"stop"}],"usage":{}}`
+
+func TestCompleteSuccess(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		if r.URL.Path != "/chat/completions" {
+			t.Errorf("path = %q, want /chat/completions", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
+			t.Errorf("authorization = %q, want %q", got, "Bearer test-key")
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/json" {
+			t.Errorf("content-type = %q, want application/json", got)
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read body: %v", err)
+		}
+		var req CompletionRequest
+		if err := json.Unmarshal(body, &req); err != nil {
+			t.Fatalf("request body is not a valid CompletionRequest: %v", err)
+		}
+		if req.Model != "test-model" || len(req.Messages) != 2 {
+			t.Errorf("request = model %q, %d messages", req.Model, len(req.Messages))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, okCompletion)
+	}))
+	defer srv.Close()
+
+	client := NewOpenAIClient("test-key", srv.URL, "test-model")
+	client.HTTPClient = srv.Client()
+	req := NewCompletionRequest("test-model", "instruct", "prompt")
+	resp, err := client.Complete(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Complete() error = %v", err)
+	}
+	if resp.Content != "all good" {
+		t.Errorf("Content = %q, want %q", resp.Content, "all good")
+	}
+	if resp.FinishReason != "stop" || !resp.Completed() {
+		t.Errorf("expected finish_reason stop, got %q", resp.FinishReason)
+	}
+}
+
+func TestCompleteKeepsExistingEndpoint(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			t.Errorf("path = %q, want /chat/completions (not double-appended)", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, okCompletion)
+	}))
+	defer srv.Close()
+
+	client := NewOpenAIClient("test-key", srv.URL+"/chat/completions", "test-model")
+	client.HTTPClient = srv.Client()
+	if _, err := client.Complete(context.Background(), &CompletionRequest{Model: "test-model"}); err != nil {
+		t.Fatalf("Complete() error = %v", err)
+	}
+}
+
+func TestCompleteAPIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"error":{"message":"boom","type":"server_error","param":"","code":500}}`)
+	}))
+	defer srv.Close()
+
+	client := NewOpenAIClient("test-key", srv.URL, "test-model")
+	client.HTTPClient = srv.Client()
+	_, err := client.Complete(context.Background(), &CompletionRequest{Model: "test-model"})
+	if err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("Complete() error = %v, want it to contain %q", err, "boom")
+	}
+}
+
+func TestCompleteMissingCredentials(t *testing.T) {
+	client := NewOpenAIClient("", "", "test-model")
+	if _, err := client.Complete(context.Background(), &CompletionRequest{Model: "test-model"}); err == nil {
+		t.Fatal("Complete() error = nil, want missing-credentials error")
+	}
+}
+
+func TestCompleteNilReceiver(t *testing.T) {
+	var client *OpenAIClient
+	if _, err := client.Complete(context.Background(), &CompletionRequest{Model: "test-model"}); err == nil {
+		t.Fatal("Complete() error = nil, want nil-client error")
+	}
+}
+
+func TestCompleteContextCancelled(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+
+	client := NewOpenAIClient("test-key", srv.URL, "test-model")
+	client.HTTPClient = srv.Client()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := client.Complete(ctx, &CompletionRequest{Model: "test-model"}); err == nil {
+		t.Fatal("Complete() error = nil, want context-cancelled error")
 	}
 }

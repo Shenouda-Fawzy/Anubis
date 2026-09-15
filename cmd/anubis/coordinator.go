@@ -10,11 +10,11 @@ import (
 type Coordinator struct {
 	Agents    []*Agent
 	pr        *ReviewRequest
-	LlmClient *OpenAIClient
+	LlmClient ChatCompleter
 	result    *ReviewResult
 }
 
-func NewCoordinator(agents []*Agent, repoName string, llmClient *OpenAIClient) *Coordinator {
+func NewCoordinator(agents []*Agent, repoName string, llmClient ChatCompleter) *Coordinator {
 	c := Coordinator{
 		Agents: agents,
 		result: &ReviewResult{},
@@ -86,7 +86,7 @@ func (c *Coordinator) Review(ctx context.Context) {
 	fmt.Println(finalPrompt)
 	fmt.Println("--- final prompt done ---")
 
-	r := NewCompletionRequest(c.LlmClient.Model, masterPrompt, finalPrompt)
+	r := NewCompletionRequest(c.LlmClient.ModelName(), masterPrompt, finalPrompt)
 	log.Printf("Completion Request obj %#v\n", r)
 	resp, err := c.LlmClient.Complete(ctx, r)
 	if err != nil {

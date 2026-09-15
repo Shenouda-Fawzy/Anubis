@@ -20,9 +20,16 @@ type AgentCard struct {
 	Model       string // Optional
 }
 
+// ChatCompleter is the LLM dependency shared by Agent and Coordinator.
+// *OpenAIClient satisfies it; tests can substitute a stub.
+type ChatCompleter interface {
+	ModelName() string
+	Complete(ctx context.Context, req *CompletionRequest) (*CompletionResponse, error)
+}
+
 type Agent struct {
 	*AgentCard
-	LlmClient    *OpenAIClient
+	LlmClient    ChatCompleter
 	Finding      string
 	ReviewStatus ReviewStatus
 }
@@ -74,6 +81,9 @@ func (a *Agent) Review(ctx context.Context, pr *ReviewRequest) error {
 
 	if a == nil || a.AgentCard == nil {
 		return errors.New("invalid agent")
+	}
+	if a.LlmClient == nil {
+		return errors.New("invalid llm client")
 	}
 	c := NewCompletionRequest(a.Model, masterPrompt, a.Description)
 	if c == nil {
