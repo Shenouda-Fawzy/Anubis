@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 )
@@ -113,13 +113,10 @@ func (o *OpenAIClient) Complete(ctx context.Context, req *CompletionRequest) (*C
 	}
 	body, err := json.Marshal(req)
 	if err != nil {
-		log.Println(err)
+		slog.Error("failed to marshal completion request", "error", err)
 		return nil, err
 	}
-	fmt.Printf("API POST %s", url)
-	fmt.Println("*** Req Body ***")
-	fmt.Println(string(body))
-	fmt.Println("*** End Req body ***")
+	slog.Debug("api request", "url", url, "body", string(body))
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("llm: create request: %w", err)
@@ -130,7 +127,7 @@ func (o *OpenAIClient) Complete(ctx context.Context, req *CompletionRequest) (*C
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("HTTP Response Status Code = ", resp.Status)
+	slog.Debug("api response status", "status", resp.Status)
 	defer func() {
 		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
@@ -138,19 +135,17 @@ func (o *OpenAIClient) Complete(ctx context.Context, req *CompletionRequest) (*C
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 30<<20))
 	if err != nil {
-		log.Println(err)
+		slog.Error("failed to read response body", "error", err)
 		return nil, err
 	}
-	fmt.Println("*** Resp Body ***")
-	fmt.Println(string(data))
-	fmt.Println("*** End Resp body ***")
+	slog.Debug("api response body", "body", string(data))
 	d, err := ParseResponse(data)
 	if err != nil {
-		log.Println(err)
+		slog.Error("failed to parse response", "error", err)
 		return nil, err
 	}
 	if d.HasError() {
-		log.Println("completion finished with error")
+		slog.Error("completion finished with error", "message", d.Err.Message, "code", d.Err.Code, "type", d.Err.Type, "param", d.Err.Param)
 		return nil, fmt.Errorf("error message=%s, code=%d, type=%s, param=%s", d.Err.Message, d.Err.Code, d.Err.Type, d.Err.Param)
 	}
 	cr := CompletionResponse{

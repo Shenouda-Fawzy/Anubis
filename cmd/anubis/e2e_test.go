@@ -3,9 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -22,27 +21,28 @@ import (
 var e2eBinaryPath string
 
 func TestMain(m *testing.M) {
-	log.Println("Test main started")
+	slog.Info("Test main started")
 	root := moduleRoot()
 	if root == "" {
-		fmt.Fprintln(os.Stderr, "e2e: unable to locate go.mod")
+		slog.Error("e2e: unable to locate go.mod")
 		os.Exit(1)
 	}
 
 	tmp, err := os.MkdirTemp("", "anubis-e2e-*")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "e2e:", err)
+		slog.Error("e2e: create temp dir", "error", err)
 		os.Exit(1)
 	}
 	e2eBinaryPath = filepath.Join(tmp, "anubis")
 
+	// #nosec G204 -- test-only: command and args are constant except for a path under our own os.MkdirTemp dir
 	cmd := exec.Command("go", "build", "-o", e2eBinaryPath, ".")
 	cmd.Dir = filepath.Join(root, "cmd", "anubis")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		_ = os.RemoveAll(tmp)
-		fmt.Fprintln(os.Stderr, "e2e: go build ./cmd/anubis failed:", err)
+		slog.Error("e2e: go build ./cmd/anubis failed", "error", err)
 		os.Exit(1)
 	}
 

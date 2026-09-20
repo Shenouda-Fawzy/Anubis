@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -34,7 +34,7 @@ func NewGithubClient(token, baseURL string) *Client {
 
 	c, err := ghb.NewClient(opts...)
 	if err != nil {
-		log.Println(err)
+		slog.Error("failed to create github client", "error", err)
 		return nil
 	}
 	return &Client{BaseURL: trimmedBaseURL, Token: token, HTTPClient: httpClient, GhbClient: c}
@@ -56,8 +56,8 @@ type File struct {
 }
 
 func (c *Client) GetPullRequest(ctx context.Context, owner, repo string, number int) (PullRequest, error) {
-	log.Println("GetPullRequest started")
-	defer log.Println("GetPullRequest done")
+	slog.Debug("GetPullRequest started")
+	defer slog.Debug("GetPullRequest done")
 
 	pr, _, err := c.GhbClient.PullRequests.Get(ctx, owner, repo, number)
 	if err != nil {
@@ -72,8 +72,8 @@ func (c *Client) GetPullRequest(ctx context.Context, owner, repo string, number 
 }
 
 func (c *Client) GetDiff(ctx context.Context, owner, repo string, number int) (string, error) {
-	log.Println("GetDiff started")
-	defer log.Println("GetDiff done")
+	slog.Debug("GetDiff started")
+	defer slog.Debug("GetDiff done")
 
 	diff, _, err := c.GhbClient.PullRequests.GetRaw(ctx, owner, repo, number, ghb.RawOptions{Type: ghb.Diff})
 	return diff, err
@@ -82,8 +82,8 @@ func (c *Client) GetDiff(ctx context.Context, owner, repo string, number int) (s
 // ListFiles gets list of changed/added files on the PR
 // https://docs.github.com/en/rest/pulls/pulls?apiVersion=2026-03-10#list-pull-requests-files
 func (c *Client) ListFiles(ctx context.Context, owner, repo string, number int) ([]File, error) {
-	log.Println("ListFiles started")
-	defer log.Println("ListFiles done")
+	slog.Debug("ListFiles started")
+	defer slog.Debug("ListFiles done")
 	var all []File
 	opts := &ghb.ListOptions{PerPage: 100}
 	for {
@@ -108,8 +108,8 @@ func (c *Client) ListFiles(ctx context.Context, owner, repo string, number int) 
 }
 
 func (c *Client) CreateComment(ctx context.Context, owner, repo string, number int, body string) error {
-	log.Println("CreateComment started")
-	defer log.Println("CreateComment done")
+	slog.Info("CreateComment started", "owner", owner, "repo", repo, "number", number)
+	defer slog.Debug("CreateComment done")
 	_, _, err := c.GhbClient.Issues.CreateComment(ctx, owner, repo, number, &ghb.IssueComment{Body: ghb.Ptr(body)})
 	return err
 }

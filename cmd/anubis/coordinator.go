@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 )
 
@@ -49,26 +49,26 @@ func (c *Coordinator) SetPRdetails(pr *PullRequest, diff string) {
 // Get result as JSON object
 
 func (c *Coordinator) Review(ctx context.Context) {
-	log.Println("Coordinator started")
-	defer log.Println("Coordinator done")
+	slog.Debug("Coordinator started")
+	defer slog.Debug("Coordinator done")
 	if c == nil {
-		log.Println("coordinator is invalid")
+		slog.Error("coordinator is invalid")
 		return
 	}
 	// It should never happen as there will always be an agent either
 	// user provided or default agent
 	if len(c.Agents) == 0 {
-		log.Println("no agents, please ensure there is a least one agent")
+		slog.Warn("no agents, please ensure there is at least one agent")
 		return
 	}
 	prompt := strings.Builder{}
 	// Now each agent will do its own review, and will keep it in its memory
 	for _, a := range c.Agents {
-		log.Printf("Agent Card %#v\n", a.AgentCard)
+		slog.Debug("agent card", "name", a.Name, "status", a.Status, "description", a.Description)
 		err := a.Review(ctx, c.pr)
 		// defer a.Done()
 		if err != nil {
-			log.Println(err)
+			slog.Error("agent review failed", "agent", a.Name, "error", err)
 			return
 		}
 		addAgentFinding(&prompt, a.Name, a.Finding)
@@ -82,18 +82,20 @@ func (c *Coordinator) Review(ctx context.Context) {
 		prompt.String(),
 	)
 
-	fmt.Println("--- final prompt ---")
-	fmt.Println(finalPrompt)
-	fmt.Println("--- final prompt done ---")
+	slog.Debug("final prompt", "prompt", finalPrompt)
 
 	r := NewCompletionRequest(c.LlmClient.ModelName(), masterPrompt, finalPrompt)
-	log.Printf("Completion Request obj %#v\n", r)
-	resp, err := c.LlmClient.Complete(ctx, r)
-	if err != nil {
-		log.Println(err)
+	if r == nil {
+		slog.Error("unable to create completion request")
 		return
 	}
-	log.Printf("Coordinator Result = %#v\n", resp)
+	slog.Debug("completion request", "model", r.Model)
+	resp, err := c.LlmClient.Complete(ctx, r)
+	if err != nil {
+		slog.Error("llm completion failed", "error", err)
+		return
+	}
+	slog.Debug("coordinator result", "content", resp.Content, "finish_reason", resp.FinishReason)
 	if resp.Completed() == false {
 		c.result.ReviewStatus = StatusReviewInComplete
 	} else {

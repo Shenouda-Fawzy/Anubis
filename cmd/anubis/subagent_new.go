@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 )
 
 type AgentStatus int
@@ -49,7 +49,7 @@ type ReviewResult struct {
 
 func (r *ReviewResult) Reviewed() bool {
 	if r == nil {
-		log.Println("r = nil")
+		slog.Warn("review result is nil")
 		return false
 	}
 	return r.ReviewStatus == StatusReviewCompleted
@@ -76,8 +76,15 @@ func (a *Agent) Done() {
 }
 
 func (a *Agent) Review(ctx context.Context, pr *ReviewRequest) error {
-	log.Println("Subagent started")
-	defer log.Println("Subagent done")
+	name := ""
+	if a != nil && a.AgentCard != nil {
+		name = a.Name
+	}
+	if name == "" {
+		name = "N/A"
+	}
+	slog.Debug("Subagent started", "agent", name)
+	defer slog.Debug("Subagent done", "agent", name)
 
 	if a == nil || a.AgentCard == nil {
 		return errors.New("invalid agent")
@@ -91,10 +98,10 @@ func (a *Agent) Review(ctx context.Context, pr *ReviewRequest) error {
 	}
 	result, err := a.LlmClient.Complete(ctx, c)
 	if err != nil {
-		log.Println(err)
+		slog.Error("subagent completion failed", "agent", name, "error", err)
 		return err
 	}
-	log.Printf("Subagent Result = %#v\n", result)
+	slog.Debug("Subagent Result", "agent", name, "content", result.Content, "finish_reason", result.FinishReason)
 	a.Finding = result.Content
 	if result.Completed() {
 		a.ReviewStatus = StatusReviewCompleted

@@ -28,7 +28,7 @@ Flow: load agents → each returns `[]Finding` → dedupe → summary synthesis 
 - Models must return a JSON array of findings; `ParseFindings` tolerates ```json fences and surrounding prose.
 - If `-agents` is unset or the dir yields no enabled agents, built-in agents (security/performance/coding-standards) run instead.
 - Models default to OpenCode Zen's free `big-pickle` model (`-llm-base-url` `https://opencode.ai/zen/v1`). Any OpenAI-compatible endpoint works, e.g. Google Gemini free tier (`https://generativelanguage.googleapis.com/v1beta/openai`). API key is `OPENCODE_API_KEY`, falling back to `OPENAI_API_KEY`, then `GEMINI_API_KEY`.
-- Env: `GITHUB_TOKEN`, `OPENCODE_API_KEY`; flags `-repo`/`GITHUB_REPOSITORY`, `-github-base-url`/`GITHUB_API_URL`, `-model`/`ANUBIS_MODEL` (default `big-pickle`), `-llm-base-url`/`ANUBIS_LLM_BASE_URL` (default `https://opencode.ai/zen/v1`). See `llm.DefaultBaseURL`/`llm.DefaultModel`.
+- Env: `GITHUB_TOKEN`, `OPENCODE_API_KEY`; flags `-repo`/`GITHUB_REPOSITORY`, `-github-base-url`/`GITHUB_API_URL`, `-model`/`ANUBIS_MODEL`, `-llm-base-url`/`ANUBIS_LLM_BASE_URL`, `-log-level`/`ANUBIS_LOG_LEVEL` (one of `debug`, `info`, `warn`, `error`; default `info`). Logs go to stderr as structured text via `log/slog`.
 - `go.mod` requires the 1.26.x toolchain.
 
 ## GitHub Action packaging

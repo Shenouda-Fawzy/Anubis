@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
+	"log/slog"
 	"os"
 	"strings"
 )
@@ -11,8 +11,6 @@ import (
 // This will be main entry
 
 func Review() {
-	// Print file location as will as timestamp in UTC
-	log.SetFlags(log.Llongfile | log.Ltime | log.Ldate | log.LUTC)
 	var (
 		repo          string
 		pullReqNum    int
@@ -21,10 +19,11 @@ func Review() {
 		baseURL       string
 		githubBaseURL string
 		githubToken   string
+		logLevel      string
 		// When true, comment will be added to the PR
 		publishComment bool
 	)
-	log.Print("Anubis")
+	flag.StringVar(&logLevel, "log-level", envOr("ANUBIS_LOG_LEVEL", "info"), "log level: debug, info, warn, error")
 	flag.StringVar(&repo, "repo", os.Getenv("GITHUB_REPOSITORY"), "repository in 'owner/name' form")
 	flag.IntVar(&pullReqNum, "pr", 0, "pull request number")
 	flag.StringVar(&agentDir, "agents", "", "directory containing Markdown agents")
@@ -35,6 +34,9 @@ func Review() {
 	flag.BoolVar(&publishComment, "publish", false, "publish the review as a PR comment")
 
 	flag.Parse()
+
+	setupLogger(logLevel)
+	slog.Info("Anubis")
 
 	if repo == "" || pullReqNum <= 0 {
 		fatal("both -repo and -pr are required")
@@ -51,7 +53,7 @@ func Review() {
 		fatal(err.Error())
 		return
 	}
-	log.Printf("Pull Request = %#v\n", pr)
+	slog.Debug("pull request loaded", "number", pr.Number, "title", pr.Title)
 	owner := parts[0]
 	repoName := parts[1]
 	diff, err := ghb.GetDiff(ctx, owner, repoName, pullReqNum)
@@ -61,7 +63,7 @@ func Review() {
 	}
 
 	llmClient := NewOpenAIClient(envOr("AI_API_KEY", ""), baseURL, model)
-	log.Printf("LLM client %#v\n", llmClient)
+	slog.Debug("LLM client configured", "base_url", llmClient.BaseURL, "model", llmClient.Model)
 
 	// Create default agents
 	// Then add support for user defined agents
@@ -69,14 +71,14 @@ func Review() {
 	c := NewCoordinator(defaultAgents(llmClient), repoName, llmClient)
 
 	c.SetPRdetails(&pr, diff)
-	log.Printf("Coordinator %#v\n", c)
+	slog.Debug("coordinator created", "agent_count", len(c.Agents))
 
 	c.Review(context.Background())
 	comment := "No findings"
 	if publishComment {
-		log.Println("Publishing comment")
+		slog.Info("publishing comment")
 		if c.FindingsText() != "" {
-			log.Println("Found findings")
+			slog.Debug("findings found")
 			comment = c.FindingsText()
 		}
 		if err := ghb.CreateComment(ctx, owner, repoName, pullReqNum, comment); err != nil {
