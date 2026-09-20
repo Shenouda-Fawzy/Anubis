@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -73,11 +74,15 @@ func Review() {
 	c.SetPRdetails(&pr, diff)
 	slog.Debug("coordinator created", "agent_count", len(c.Agents))
 
-	c.Review(context.Background())
+	reviewErr := c.Review(context.Background())
 	comment := "No findings"
+	if reviewErr != nil {
+		slog.Error("review failed", "error", reviewErr)
+		comment = failureComment(reviewErr)
+	}
 	if publishComment {
 		slog.Info("publishing comment")
-		if c.FindingsText() != "" {
+		if reviewErr == nil && c.FindingsText() != "" {
 			slog.Debug("findings found")
 			comment = c.FindingsText()
 		}
@@ -86,6 +91,22 @@ func Review() {
 			return
 		}
 	}
+	if reviewErr != nil {
+		fatal(reviewErr.Error())
+	}
+}
+
+// failureComment builds the PR comment posted when the review couldn't
+// complete (e.g. LLM outage/rate limit), so readers know it is not a clean
+// review rather than silently reporting "No findings".
+func failureComment(err error) string {
+	return fmt.Sprintf(
+		"⚠️ **Anubis could not complete the review**\n\n"+
+			"The LLM review step failed, so no trustworthy findings were produced. "+
+			"This is **not** a clean review — please inspect the PR manually and re-run "+
+			"Anubis once the LLM service recovers.\n\nError: %v",
+		err,
+	)
 }
 
 /*

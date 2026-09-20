@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -48,18 +49,22 @@ func (c *Coordinator) SetPRdetails(pr *PullRequest, diff string) {
 // Ask LLM to deduplicate and synthesize
 // Get result as JSON object
 
-func (c *Coordinator) Review(ctx context.Context) {
+func (c *Coordinator) Review(ctx context.Context) error {
 	slog.Debug("Coordinator started")
 	defer slog.Debug("Coordinator done")
 	if c == nil {
-		slog.Error("coordinator is invalid")
-		return
+		return errors.New("coordinator is invalid")
 	}
+
+	fail := func(err error) error {
+		slog.Error("review failed", "error", err)
+		return err
+	}
+
 	// It should never happen as there will always be an agent either
 	// user provided or default agent
 	if len(c.Agents) == 0 {
-		slog.Warn("no agents, please ensure there is at least one agent")
-		return
+		return fail(errors.New("no agents, please ensure there is at least one agent"))
 	}
 	prompt := strings.Builder{}
 	// Now each agent will do its own review, and will keep it in its memory
@@ -68,8 +73,7 @@ func (c *Coordinator) Review(ctx context.Context) {
 		err := a.Review(ctx, c.pr)
 		// defer a.Done()
 		if err != nil {
-			slog.Error("agent review failed", "agent", a.Name, "error", err)
-			return
+			return fail(fmt.Errorf("agent %q review failed: %w", a.Name, err))
 		}
 		addAgentFinding(&prompt, a.Name, a.Finding)
 	}
@@ -86,14 +90,15 @@ func (c *Coordinator) Review(ctx context.Context) {
 
 	r := NewCompletionRequest(c.LlmClient.ModelName(), masterPrompt, finalPrompt)
 	if r == nil {
-		slog.Error("unable to create completion request")
-		return
+		return fail(errors.New("unable to create completion request"))
 	}
 	slog.Debug("completion request", "model", r.Model)
 	resp, err := c.LlmClient.Complete(ctx, r)
 	if err != nil {
-		slog.Error("llm completion failed", "error", err)
-		return
+		return fail(fmt.Errorf("llm completion failed: %w", err))
+	}
+	if resp == nil {
+		return fail(errors.New("llm returned nil completion response"))
 	}
 	slog.Debug("coordinator result", "content", resp.Content, "finish_reason", resp.FinishReason)
 	if resp.Completed() == false {
@@ -102,6 +107,7 @@ func (c *Coordinator) Review(ctx context.Context) {
 		c.result.ReviewStatus = StatusReviewCompleted
 	}
 	c.result.ReviewFindingText = resp.Content
+	return nil
 }
 
 func addAgentFinding(b *strings.Builder, agentName, finding string) {
