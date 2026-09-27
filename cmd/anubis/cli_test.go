@@ -176,3 +176,55 @@ func TestLongHelpDocumentsMaxConcurrency(t *testing.T) {
 		t.Error("longHelp() does not state the default of 1")
 	}
 }
+
+// A workflow input that is left unset expands to an empty string, and the
+// action passes it through. Without this, a non-pull_request event produced a
+// raw strconv error and a usage dump instead of the required-flag message.
+func TestOptionalIntAcceptsEmptyValue(t *testing.T) {
+	tests := []struct {
+		in   string
+		want int
+	}{
+		{"", 0},
+		{"   ", 0},
+		{"42", 42},
+		{" 42 ", 42},
+		{"0", 0},
+		{"-1", -1},
+	}
+	for _, tc := range tests {
+		var got int
+		f := optionalInt{&got}
+		if err := f.Set(tc.in); err != nil {
+			t.Errorf("Set(%q) returned %v, want nil", tc.in, err)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("Set(%q) = %d, want %d", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestOptionalIntRejectsNonNumeric(t *testing.T) {
+	var got int
+	if err := (optionalInt{&got}).Set("abc"); err == nil {
+		t.Error(`Set("abc") returned nil, want a parse error`)
+	}
+}
+
+func TestOptionalIntString(t *testing.T) {
+	var got int
+	f := optionalInt{&got}
+	if s := f.String(); s != "0" {
+		t.Errorf("String() on unset = %q, want %q", s, "0")
+	}
+	if err := f.Set("7"); err != nil {
+		t.Fatalf("Set(7) returned %v", err)
+	}
+	if s := f.String(); s != "7" {
+		t.Errorf("String() = %q, want %q", s, "7")
+	}
+	if s := (optionalInt{nil}).String(); s != "" {
+		t.Errorf("String() on nil target = %q, want empty", s)
+	}
+}

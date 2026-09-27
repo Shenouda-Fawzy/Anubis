@@ -12,6 +12,33 @@ import (
 
 // This will be main entry
 
+// optionalInt is an int flag that accepts an empty value. An input that is unset
+// in a workflow expands to the empty string, which strconv rejects with a raw
+// parse error; treating it as unset instead lets the required-flag check report
+// it in the program's own words.
+type optionalInt struct{ v *int }
+
+func (o optionalInt) String() string {
+	if o.v == nil {
+		return ""
+	}
+	return strconv.Itoa(*o.v)
+}
+
+func (o optionalInt) Set(s string) error {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		*o.v = 0
+		return nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return err
+	}
+	*o.v = n
+	return nil
+}
+
 func Review() {
 	var (
 		repo          string
@@ -26,7 +53,7 @@ func Review() {
 	)
 	flag.StringVar(&logLevel, "log-level", envOr("ANUBIS_LOG_LEVEL", "info"), "log level: debug, info, warn, error")
 	flag.StringVar(&repo, "repo", os.Getenv("GITHUB_REPOSITORY"), "repository in 'owner/name' form")
-	flag.IntVar(&pullReqNum, "pr", 0, "pull request number")
+	flag.Var(optionalInt{&pullReqNum}, "pr", "pull request number")
 	flag.StringVar(&model, "model", envOr("ANUBIS_MODEL", defaultModel), "chat model")
 	flag.StringVar(&baseURL, "llm-base-url", envOr("ANUBIS_LLM_BASE_URL", defaultLLMBaseURL), "OpenAI-compatible API base URL")
 	flag.StringVar(&githubBaseURL, "github-base-url", envOr("GITHUB_API_URL", defaultGitHubBaseURL), "GitHub API base URL")
