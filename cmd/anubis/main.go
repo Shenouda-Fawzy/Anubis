@@ -27,6 +27,14 @@ const (
 // cannot stall a workflow indefinitely.
 const httpTimeout = 120 * time.Second
 
+// defaultMaxConcurrency is how many specialist reviewers may run at once. The
+// default of 1 runs them one after another. Sequential is the safe default: a
+// review costs one provider call per specialist, so fanning them out is the
+// fastest way to hit a free tier's rate limit. Raise ANUBIS_MAX_CONCURRENCY
+// when the provider can absorb the fan-out and the wall-clock saving is worth
+// the spend.
+const defaultMaxConcurrency = 1
+
 // maxDiffBytes caps how much of a diff is sent to the model. Very large pull
 // requests are truncated with a marker rather than failing the request, because
 // most model context windows are far smaller than the API's own limits and a
@@ -45,6 +53,23 @@ func envOr(name, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// maxConcurrency resolves how many specialist reviewers may run at once from
+// ANUBIS_MAX_CONCURRENCY. An unset, unparseable or non-positive value falls back
+// to the sequential default rather than failing the run, because a typo in a
+// tuning variable should not stop a review from happening.
+func maxConcurrency() int {
+	raw := strings.TrimSpace(os.Getenv("ANUBIS_MAX_CONCURRENCY"))
+	if raw == "" {
+		return defaultMaxConcurrency
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 1 {
+		slog.Warn("ignoring invalid ANUBIS_MAX_CONCURRENCY, running sequentially", "value", raw)
+		return defaultMaxConcurrency
+	}
+	return n
 }
 
 // sourceRoot is the absolute module root (directory containing the source

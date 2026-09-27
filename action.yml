@@ -45,6 +45,10 @@ inputs:
     description: 'Log verbosity: debug, info, warn or error. Note that debug still never logs diff content.'
     required: false
     default: 'info'
+  max-concurrency:
+    description: 'How many specialist reviewers may run at once. The default of 1 runs them one after another, which is the gentlest option for a provider rate limit. Raise it to reduce wall-clock time at the cost of parallel requests.'
+    required: false
+    default: '1'
 
 runs:
   using: 'docker'
@@ -56,6 +60,7 @@ runs:
     ANUBIS_MODEL: ${{ inputs.model }}
     ANUBIS_LLM_BASE_URL: ${{ inputs.llm-base-url }}
     ANUBIS_LOG_LEVEL: ${{ inputs.log-level }}
+    ANUBIS_MAX_CONCURRENCY: ${{ inputs.max-concurrency }}
     OPENCODE_API_KEY: ${{ inputs.opencode-api-key }}
   args:
     - -pr

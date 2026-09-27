@@ -37,8 +37,9 @@ Everything lives in `package main` under `cmd/anubis`. There is no `pkg/` tree.
 | `reviewprompt.go` | Coordinator user-message template |
 | `log_color.go` | Optional ANSI coloring of the slog text output |
 
-Flow: load PR and diff → run all agents concurrently (max 4) → synthesize with
-the coordinator → optionally post as a PR comment.
+Flow: load PR and diff → run all agents (concurrency from `ANUBIS_MAX_CONCURRENCY`,
+default 1, hard ceiling 4) → synthesize with the coordinator → optionally post as
+a PR comment.
 
 ## Non-obvious behavior
 
@@ -54,10 +55,12 @@ the coordinator → optionally post as a PR comment.
   specialist gets `subAgentPrompt` as its system message and a task rendered by
   `subAgentTask` that embeds the PR context and the full diff. `Agent.Review`
   takes a non-empty `pr.Diff` and returns an error otherwise.
-- **Agents run concurrently but findings are folded in configured order**
+- **Agents may run concurrently, but findings are folded in configured order**
   (`Coordinator.runAgents`), so the synthesis prompt is stable across runs. Each
   goroutine writes only its own `Agent.Finding`; run `go test -race` if you touch
-  this.
+  this. The default is **sequential** (`defaultMaxConcurrency = 1`) to avoid
+  rate limits; `Coordinator.MaxConcurrency` raises it, and the `concurrency()`
+  helper clamps it to the agent count and to `maxConcurrentAgents` (4).
 - **Partial failure is tolerated, total failure is not.** One failed agent still
   produces a review, and the comment discloses how many agents failed. If no
   agent produced a finding, `Review` returns an error and the comment becomes a

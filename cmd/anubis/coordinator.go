@@ -14,6 +14,9 @@ type Coordinator struct {
 	pr        *ReviewRequest
 	LlmClient ChatCompleter
 	result    *ReviewResult
+	// MaxConcurrency caps how many specialists run at once. Zero means the
+	// coordinator picks the safe default (sequential); see concurrency().
+	MaxConcurrency int
 	// failures records specialist agents that did not return a finding during
 	// the last review, so the published comment can disclose partial coverage.
 	failures []AgentFailure
@@ -92,7 +95,9 @@ var errNoFindings = errors.New("the model returned an empty review")
 
 // maxConcurrentAgents bounds how many specialist reviewers run at once, so a
 // large agent set cannot fan out into an unbounded number of in-flight
-// provider requests.
+// provider requests. It is the ceiling used when the caller does not set
+// MaxConcurrency explicitly; see defaultMaxConcurrency for why the shipped
+// default is 1.
 const maxConcurrentAgents = 4
 
 // Review runs every specialist agent against the pull request, then asks the
@@ -196,14 +201,26 @@ func allAgentsFailedError(agents []*Agent, failures []AgentFailure) error {
 	return fmt.Errorf("all %d review agents failed (%s): %w", len(agents), strings.Join(names, ", "), cause)
 }
 
-// runAgents executes every agent concurrently and returns the findings in agent
-// order along with the errors that occurred. A single error never cancels the
-// remaining agents; the caller decides whether the partial result is usable.
+// concurrency is the effective cap on simultaneous specialist reviews, never
+// less than 1 and never more than the agent count.
+func (c *Coordinator) concurrency() int {
+	n := c.MaxConcurrency
+	if n == 0 {
+		n = defaultMaxConcurrency
+	}
+	return min(n, len(c.Agents), maxConcurrentAgents)
+}
+
+// runAgents executes the agents, at most MaxConcurrency at a time, and returns
+// the findings in agent order along with the errors that occurred. A single
+// error never cancels the remaining agents; the caller decides whether the
+// partial result is usable. Findings are collected by index rather than appended
+// so the order stays stable no matter what order the goroutines finish in.
 func (c *Coordinator) runAgents(ctx context.Context) (findings []string, failures []AgentFailure) {
 	findings = make([]string, len(c.Agents))
 	errs := make([]AgentFailure, len(c.Agents))
 
-	limit := min(maxConcurrentAgents, len(c.Agents))
+	limit := c.concurrency()
 	sem := make(chan struct{}, limit)
 	var wg sync.WaitGroup
 

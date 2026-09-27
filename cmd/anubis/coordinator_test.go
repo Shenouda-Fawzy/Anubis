@@ -108,10 +108,12 @@ func TestReviewPromptArgumentsAreAligned(t *testing.T) {
 	}
 }
 
-func TestCoordinatorRunsAgentsConcurrently(t *testing.T) {
-	const agents = 4
-	llm := &recordingCompleter{finding: "f", synthesis: "final", delay: 150 * time.Millisecond}
-
+// newConcurrencyHarness builds a coordinator whose specialists are all slow
+// enough that any overlap is unambiguous, and returns the fake so the caller can
+// inspect the peak fan-out.
+func newConcurrencyHarness(t *testing.T, agents, maxConcurrency int) (*Coordinator, *recordingCompleter) {
+	t.Helper()
+	llm := &recordingCompleter{finding: "f", synthesis: "final", delay: 40 * time.Millisecond}
 	as := make([]*Agent, agents)
 	for i := range as {
 		as[i] = &Agent{
@@ -120,20 +122,74 @@ func TestCoordinatorRunsAgentsConcurrently(t *testing.T) {
 		}
 	}
 	c := NewCoordinator(as, "acme/widgets", llm)
+	c.MaxConcurrency = maxConcurrency
 	c.SetPRdetails(&PullRequest{Number: 1}, "diff")
+	return c, llm
+}
 
-	start := time.Now()
+// The shipped default is sequential. This is the regression test for
+// ANUBIS_MAX_CONCURRENCY being unset.
+func TestCoordinatorDefaultsToSequentialAgents(t *testing.T) {
+	if defaultMaxConcurrency != 1 {
+		t.Fatalf("defaultMaxConcurrency = %d, want 1 (sequential)", defaultMaxConcurrency)
+	}
+	c, llm := newConcurrencyHarness(t, 4, 0)
 	if err := c.Review(context.Background()); err != nil {
 		t.Fatalf("Review() error = %v", err)
 	}
-	elapsed := time.Since(start)
-
-	// One synthesis call plus four agent calls, each gated behind the delay.
-	if elapsed >= agents*llm.delay {
-		t.Errorf("review took %v; agents look serial (want roughly one delay, not %d of them)", elapsed, agents)
+	if got := llm.peakConcurrency(); got != 1 {
+		t.Errorf("peak in-flight agent calls = %d, want 1 (sequential by default)", got)
 	}
-	if got := llm.agentCount(); got != agents {
-		t.Errorf("agent completions = %d, want %d", got, agents)
+	if got := llm.agentCount(); got != 4 {
+		t.Errorf("agent completions = %d, want 4", got)
+	}
+}
+
+func TestCoordinatorRunsAgentsConcurrentlyWhenAllowed(t *testing.T) {
+	c, llm := newConcurrencyHarness(t, 4, 4)
+	if err := c.Review(context.Background()); err != nil {
+		t.Fatalf("Review() error = %v", err)
+	}
+	if got := llm.peakConcurrency(); got != 4 {
+		t.Errorf("peak in-flight agent calls = %d, want 4 (all specialists at once)", got)
+	}
+}
+
+func TestCoordinatorRespectsPartialConcurrency(t *testing.T) {
+	c, llm := newConcurrencyHarness(t, 4, 2)
+	if err := c.Review(context.Background()); err != nil {
+		t.Fatalf("Review() error = %v", err)
+	}
+	if got := llm.peakConcurrency(); got > 2 {
+		t.Errorf("peak in-flight agent calls = %d, want at most 2", got)
+	}
+	if got := llm.agentCount(); got != 4 {
+		t.Errorf("agent completions = %d, want 4", got)
+	}
+}
+
+// An absurd value must not fan out without bound.
+func TestCoordinatorClampsConcurrencyToTheHardCeiling(t *testing.T) {
+	c, llm := newConcurrencyHarness(t, 6, 1000)
+	if err := c.Review(context.Background()); err != nil {
+		t.Fatalf("Review() error = %v", err)
+	}
+	if got := llm.peakConcurrency(); got > maxConcurrentAgents {
+		t.Errorf("peak in-flight agent calls = %d, want at most %d", got, maxConcurrentAgents)
+	}
+	if got := llm.agentCount(); got != 6 {
+		t.Errorf("agent completions = %d, want 6", got)
+	}
+}
+
+// A value larger than the agent count cannot exceed the agent count.
+func TestCoordinatorClampsConcurrencyToAgentCount(t *testing.T) {
+	c, llm := newConcurrencyHarness(t, 2, 4)
+	if err := c.Review(context.Background()); err != nil {
+		t.Fatalf("Review() error = %v", err)
+	}
+	if got := llm.peakConcurrency(); got != 2 {
+		t.Errorf("peak in-flight agent calls = %d, want 2 (only two agents)", got)
 	}
 }
 
@@ -279,11 +335,30 @@ type recordingCompleter struct {
 	mu       sync.Mutex
 	requests []*CompletionRequest
 	agents   atomic.Int32
+	inFlight atomic.Int32
+	peak     atomic.Int32
 }
 
 func (r *recordingCompleter) ModelName() string { return "test-model" }
 
 func (r *recordingCompleter) Complete(ctx context.Context, req *CompletionRequest) (*CompletionResponse, error) {
+	user := req.Messages[len(req.Messages)-1].Content
+	isSynthesis := strings.Contains(user, "<reviewer_findings>")
+
+	// Track how many specialist calls are in flight at once. Only the
+	// coordinator's single synthesis call is excluded, so the peak measures the
+	// fan-out the coordinator actually produced.
+	if !isSynthesis {
+		cur := r.inFlight.Add(1)
+		for {
+			was := r.peak.Load()
+			if cur <= was || r.peak.CompareAndSwap(was, cur) {
+				break
+			}
+		}
+		defer r.inFlight.Add(-1)
+	}
+
 	if r.delay > 0 {
 		select {
 		case <-time.After(r.delay):
@@ -291,13 +366,12 @@ func (r *recordingCompleter) Complete(ctx context.Context, req *CompletionReques
 			return nil, ctx.Err()
 		}
 	}
-	user := req.Messages[len(req.Messages)-1].Content
 
 	r.mu.Lock()
 	r.requests = append(r.requests, req)
 	r.mu.Unlock()
 
-	if strings.Contains(user, "<reviewer_findings>") {
+	if isSynthesis {
 		return &CompletionResponse{Content: r.synthesis, FinishReason: "stop"}, nil
 	}
 	r.agents.Add(1)
@@ -307,8 +381,11 @@ func (r *recordingCompleter) Complete(ctx context.Context, req *CompletionReques
 	}
 	return &CompletionResponse{Content: r.finding + ":" + focus, FinishReason: "stop"}, nil
 }
-
 func (r *recordingCompleter) agentCount() int { return int(r.agents.Load()) }
+
+// peakConcurrency is the greatest number of specialist calls that were
+// simultaneously in flight.
+func (r *recordingCompleter) peakConcurrency() int { return int(r.peak.Load()) }
 
 // synthesisPrompt returns the user message sent for the coordinator call.
 func (r *recordingCompleter) synthesisPrompt() string {

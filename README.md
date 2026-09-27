@@ -11,8 +11,9 @@ nothing to host.
 
 1. Anubis fetches the pull request and its diff from the GitHub REST API.
 2. Four built-in specialists — `security`, `correctness`, `performance` and
-   `maintainability` — review the diff **in parallel**, each with the same
-   specialist system prompt and a different focus.
+   `maintainability` — review the diff, each with the same specialist system
+   prompt and a different focus. They run **one at a time** by default; see
+   [Concurrency](#concurrency) to change that.
 3. A coordinator model receives the diff plus every specialist's findings, then
    discards false positives, deduplicates by root cause, resolves disagreements,
    and re-grades severity.
@@ -169,6 +170,37 @@ To reach those models, point `-llm-base-url` at the matching path yourself and
 be aware that Anubis still speaks the chat-completions request and response
 shape, so it only works where that shape is also correct.
 
+### Concurrency
+
+By default the four specialists run **one after another**. That is deliberate: a
+review costs one provider call per specialist, so running them together is the
+fastest way to exhaust a free tier's rate limit.
+
+Set `ANUBIS_MAX_CONCURRENCY` (or the action's `max-concurrency` input) to raise
+it when your provider can absorb the fan-out and you want the wall-clock time
+back:
+
+```yaml
+      - uses: Shenouda-Fawzy/Anubis@v1
+        with:
+          opencode-api-key: ${{ secrets.OPENCODE_API_KEY }}
+          max-concurrency: '4'
+```
+
+```sh
+ANUBIS_MAX_CONCURRENCY=4 ./anubis -repo owner/project -pr 42
+```
+
+The value is clamped to the number of agents and to a hard ceiling of 4, so a
+large setting cannot produce unbounded parallel requests. An unset,
+unparseable or non-positive value is treated as `1` and logged as a warning,
+because a typo in a tuning variable should not stop a review. Findings are
+collected by agent index, so the synthesis prompt is identical whether the
+specialists ran in parallel or in sequence.
+
+Raising this does not reduce cost. It spends the same tokens in less time, which
+makes hitting a rate limit *more* likely.
+
 ### Cost
 
 `big-pickle` is currently free. Zen also **auto-reloads $20 when a balance drops
@@ -191,8 +223,9 @@ you switch `-model` to a paid one, confirm your Zen auto-reload setting first.
   human, not parsed by a tool.
 - **`-log-level debug` never logs diff or prompt content.** Only sizes, counts
   and model metadata.
-- **Max 4 agents run concurrently**, so a larger agent set cannot fan out into
-  unbounded provider requests.
+- **Specialists run one at a time by default.** A review costs one provider
+  call per specialist, so the shipped default of `1` is the gentlest option for
+  a rate limit. See [Concurrency](#concurrency).
 
 ## Development
 

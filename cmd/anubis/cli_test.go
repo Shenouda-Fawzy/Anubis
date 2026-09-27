@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"os"
 	"strings"
 	"testing"
 )
@@ -127,3 +128,51 @@ func TestDefaultAgents(t *testing.T) {
 }
 
 var errBoom = errors.New("provider exploded")
+
+func TestMaxConcurrencyFromEnv(t *testing.T) {
+	cases := []struct {
+		name string
+		set  bool
+		val  string
+		want int
+	}{
+		{name: "unset runs sequentially", set: false, want: 1},
+		{name: "empty runs sequentially", set: true, val: "", want: 1},
+		{name: "explicit one", set: true, val: "1", want: 1},
+		{name: "two", set: true, val: "2", want: 2},
+		{name: "four", set: true, val: "4", want: 4},
+		{name: "surrounding whitespace", set: true, val: "  3  ", want: 3},
+		{name: "large value is not clamped here", set: true, val: "1000", want: 1000},
+		{name: "zero falls back", set: true, val: "0", want: 1},
+		{name: "negative falls back", set: true, val: "-2", want: 1},
+		{name: "not a number falls back", set: true, val: "abc", want: 1},
+		{name: "float falls back", set: true, val: "2.5", want: 1},
+		{name: "junk falls back", set: true, val: "4;rm -rf /", want: 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.set {
+				t.Setenv("ANUBIS_MAX_CONCURRENCY", tc.val)
+			} else {
+				if err := os.Unsetenv("ANUBIS_MAX_CONCURRENCY"); err != nil {
+					t.Fatalf("Unsetenv() error = %v", err)
+				}
+			}
+			if got := maxConcurrency(); got != tc.want {
+				t.Errorf("maxConcurrency() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+// The help text is the only place a user learns the default, so it has to agree
+// with the code.
+func TestLongHelpDocumentsMaxConcurrency(t *testing.T) {
+	help := longHelp()
+	if !strings.Contains(help, "ANUBIS_MAX_CONCURRENCY") {
+		t.Error("longHelp() does not document ANUBIS_MAX_CONCURRENCY")
+	}
+	if !strings.Contains(help, "default 1") {
+		t.Error("longHelp() does not state the default of 1")
+	}
+}

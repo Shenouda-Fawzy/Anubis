@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -72,9 +73,10 @@ func Review() {
 	slog.Debug("LLM client configured", "base_url", llmClient.BaseURL, "model", llmClient.Model)
 
 	c := NewCoordinator(defaultAgents(llmClient), repoName, llmClient)
+	c.MaxConcurrency = maxConcurrency()
 
 	c.SetPRdetails(&pr, diff)
-	slog.Debug("coordinator created", "agent_count", len(c.Agents))
+	slog.Debug("coordinator created", "agent_count", len(c.Agents), "max_concurrency", c.MaxConcurrency)
 
 	reviewErr := c.Review(ctx)
 	comment := noFindingsComment
@@ -182,6 +184,8 @@ Environment:
         token used to read the pull request and post the review comment
   OPENCODE_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY or AI_API_KEY
         API key for the model provider, tried in that order
+  ANUBIS_MAX_CONCURRENCY
+        how many specialist reviewers may run at once (default ` + strconv.Itoa(defaultMaxConcurrency) + `, which runs them one after another). Raise it to trade rate-limit headroom for wall-clock time.
 
 Examples:
   anubis -repo owner/name -pr 42
