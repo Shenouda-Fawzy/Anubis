@@ -1,5 +1,5 @@
 name: 'Anubis PR review'
-description: 'Parallel specialist AI reviewers analyze a pull-request diff, then a coordinator model deduplicates their findings into one high-signal review comment.'
+description: 'Specialist AI reviewers analyze a pull-request diff one at a time, then a coordinator model deduplicates their findings into one high-signal review comment.'
 author: 'Shenouda Fawzy'
 
 branding:
@@ -63,8 +63,8 @@ runs:
     ANUBIS_MAX_CONCURRENCY: ${{ inputs.max-concurrency }}
     OPENCODE_API_KEY: ${{ inputs.opencode-api-key }}
   args:
-    - -pr
-    - ${{ inputs.pr }}
+    # -pr and -publish have no environment fallback; everything else is passed
+    # as an environment variable above. Keeping one source of truth per setting
+    # means the two can never disagree.
+    - -pr=${{ inputs.pr }}
     - -publish=${{ inputs.publish }}
-    - -log-level
-    - ${{ inputs.log-level }}
