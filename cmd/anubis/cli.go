@@ -34,6 +34,9 @@ func Review() {
 	flag.StringVar(&githubToken, "github-token", os.Getenv("GITHUB_TOKEN"), "GitHub token")
 	flag.BoolVar(&publishComment, "publish", false, "publish the review as a PR comment")
 
+	flag.Usage = func() {
+		fmt.Fprint(flag.CommandLine.Output(), longHelp())
+	}
 	flag.Parse()
 
 	setupLogger(logLevel)
@@ -107,6 +110,48 @@ func failureComment(err error) string {
 			"Anubis once the LLM service recovers.\n\nError: %v",
 		err,
 	)
+}
+
+func longHelp() string {
+	return `Anubis - AI pull-request review agent
+
+Anubis loads review agents (Markdown files), runs them against the PR diff in
+parallel, deduplicates their findings, and has the LLM synthesize a final
+review. Optionally publishes the review as a comment on the pull request.
+
+Usage:
+  anubis -repo owner/name -pr NUMBER [flags]
+
+Flags:
+  -repo string
+        repository in 'owner/name' form (env GITHUB_REPOSITORY)
+  -pr int
+        pull request number (required)
+  -agents string
+        directory containing Markdown agents (defaults to built-in agents)
+  -model string
+        chat model (env ANUBIS_MODEL)
+  -llm-base-url string
+        OpenAI-compatible API base URL (env ANUBIS_LLM_BASE_URL)
+  -github-base-url string
+        GitHub API base URL (env GITHUB_API_URL)
+  -github-token string
+        GitHub token (env GITHUB_TOKEN)
+  -publish
+        publish the review as a PR comment
+  -log-level string
+        log level: debug, info, warn, error (default "info")
+  -h    show this help
+
+Environment:
+  OPENCODE_API_KEY, OPENAI_API_KEY or GEMINI_API_KEY
+        API key for the LLM provider
+
+Examples:
+  anubis -repo owner/name -pr 42
+  anubis -repo owner/name -pr 42 -publish
+  anubis -repo owner/name -pr 42 -agents ./agents -log-level debug
+`
 }
 
 /*
