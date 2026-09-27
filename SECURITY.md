@@ -31,24 +31,18 @@ advisory unless you prefer otherwise.
 
 ## Where your diff goes
 
-By default Anubis sends the pull-request title, description and **the entire
-diff** to OpenCode Zen's `big-pickle` model at `https://opencode.ai/zen/v1`.
-That is your source code leaving your infrastructure.
+By default Anubis uploads the pull-request title, description and **the entire
+diff** to OpenCode Zen's `big-pickle` model. That is your source code leaving
+your infrastructure.
 
 **The default model is not zero-retention.** OpenCode's privacy policy states
 that during the model's free period, submitted data *may be used to improve the
-model*. `big-pickle` is a free "stealth" model, so out of the box your diffs
-can be used for model improvement. Do not point the default at a repository with
-code you would not publish.
+model*. Do not point the default at a repository with code you would not
+publish. Set `llm-base-url` to a self-hosted endpoint to keep the diff inside
+your own infrastructure.
 
-To keep the diff inside your own infrastructure, set `llm-base-url` to a
-self-hosted OpenAI-compatible endpoint (Ollama, vLLM, or a paid provider whose
-retention terms you have checked) and verify that provider's terms yourself.
-Anubis makes no claims about any provider's data handling beyond what that
-provider publishes.
-
-Provider-level privacy is separate from the model output itself. The diff is
-also visible to whoever operates the endpoint you configure.
+See [Where your diff goes](docs/providers.md#where-your-diff-goes) for the
+details and the mitigation.
 
 ## Threat model
 

@@ -37,9 +37,8 @@ body:
       label: Documentation
       description: |
         If you changed flags, inputs, outputs, environment variables or
-        behavior, did you update README.md, AGENTS.md and action.yml? These
-        have drifted before and shipping them out of sync is what breaks
-        consumers.
+        behavior, did you update docs/, AGENTS.md and action.yml? These have
+        drifted before and shipping them out of sync is what breaks consumers.
     validations:
       required: false
 

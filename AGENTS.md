@@ -46,7 +46,7 @@ a PR comment.
 - **The API key is resolved through a fallback chain**, not a single variable:
   `OPENCODE_API_KEY` → `OPENAI_API_KEY` → `GEMINI_API_KEY` → `AI_API_KEY`
   (`llmAPIKey` in `cli.go`). `action.yml` sets `OPENCODE_API_KEY`. If you change
-  the chain, change `action.yml`, the README table and `TestLLMAPIKeyFallbackOrder`.
+  the chain, change `action.yml`, `docs/configuration.md` and `TestLLMAPIKeyFallbackOrder`.
 - **The coordinator template has six verbs and six arguments.** `reviewPrompt`
   is formatted with repo, PR number, title, description, diff, findings. A short
   argument list silently shifts every value and injects `%!s(MISSING)`.
