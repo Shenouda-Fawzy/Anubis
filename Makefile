@@ -55,6 +55,3 @@ tidy:
 ## clean: remove build artifacts
 clean:
 	rm -f $(BINARY) coverage.out
-
-run:
-	./$(BINARY) -pr 18 -publish
