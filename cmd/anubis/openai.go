@@ -147,6 +147,15 @@ func (o *OpenAIClient) Complete(ctx context.Context, req *CompletionRequest) (*C
 		return nil, err
 	}
 	slog.Debug("api response", "bytes", len(data))
+
+	// A rate limit or an outage is the most likely production failure, so the
+	// status line must reach the operator. Without this the provider's error
+	// body is parsed as if it were a completion and reported as an unhelpful
+	// parse failure with no indication of why.
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("llm: provider returned %s: %s", resp.Status, snippet(data))
+	}
+
 	d, err := ParseResponse(data)
 	if err != nil {
 		slog.Error("failed to parse response", "error", err)
@@ -155,6 +164,12 @@ func (o *OpenAIClient) Complete(ctx context.Context, req *CompletionRequest) (*C
 	if d.HasError() {
 		slog.Error("completion failed", "message", d.Err.Message, "code", d.Err.Code, "type", d.Err.Type, "param", d.Err.Param)
 		return nil, fmt.Errorf("model provider returned an error: %s (type=%s, code=%d, param=%s)", d.Err.Message, d.Err.Type, d.Err.Code, d.Err.Param)
+	}
+	// Content that stopped early is not a review. Returning it would let a
+	// truncated answer read as a clean bill of health, so the reason is named
+	// and the agent is recorded as failed.
+	if d.Finished() == false {
+		return nil, fmt.Errorf("model response incomplete: finish_reason=%q (content discarded)", d.FinishReason())
 	}
 	cr := CompletionResponse{
 		Content:      d.TextContent(),
@@ -192,6 +207,31 @@ func ParseResponse(data []byte) (*completionResponse, error) {
 	default:
 		return nil, fmt.Errorf("unexpected response format")
 	}
+}
+
+// snippet reduces a provider error body to a short single-line string safe to
+// put in a log and in an error message. Providers return everything from a
+// one-line JSON error to a full HTML error page, and neither control
+// characters nor a multi-kilobyte stack trace belongs in the review log.
+func snippet(data []byte) string {
+	const maxSnippetLen = 200
+	s := strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\r' || r == '\t' {
+			return ' '
+		}
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, string(data))
+	s = strings.Join(strings.Fields(s), " ")
+	if s == "" {
+		return "(empty body)"
+	}
+	if len(s) > maxSnippetLen {
+		return s[:maxSnippetLen] + "..."
+	}
+	return s
 }
 
 func (u *Usage) promptTokens() int {

@@ -16,8 +16,7 @@ support branch.
 Please do **not** open a public issue for a security problem.
 
 Use GitHub's private reporting via the "Security" tab on this repository
-("Report a vulnerability"). If that is unavailable to you, email the maintainer
-listed in [LICENSE](LICENSE) instead.
+("Report a vulnerability"). That is the only reporting channel for this project.
 
 Please include:
 
@@ -29,6 +28,27 @@ Please include:
 You can expect an acknowledgement within a week. Fixes are released as a patch
 tag, and the advisory is published at the same time. Credit is given in the
 advisory unless you prefer otherwise.
+
+## Where your diff goes
+
+By default Anubis sends the pull-request title, description and **the entire
+diff** to OpenCode Zen's `big-pickle` model at `https://opencode.ai/zen/v1`.
+That is your source code leaving your infrastructure.
+
+**The default model is not zero-retention.** OpenCode's privacy policy states
+that during the model's free period, submitted data *may be used to improve the
+model*. `big-pickle` is a free "stealth" model, so out of the box your diffs
+can be used for model improvement. Do not point the default at a repository with
+code you would not publish.
+
+To keep the diff inside your own infrastructure, set `llm-base-url` to a
+self-hosted OpenAI-compatible endpoint (Ollama, vLLM, or a paid provider whose
+retention terms you have checked) and verify that provider's terms yourself.
+Anubis makes no claims about any provider's data handling beyond what that
+provider publishes.
+
+Provider-level privacy is separate from the model output itself. The diff is
+also visible to whoever operates the endpoint you configure.
 
 ## Threat model
 
@@ -52,9 +72,9 @@ What Anubis does **not** do, and does not claim to:
 - **The model output is not verified.** A review is generated text, not a
   guarantee. Prompt injection through a diff is mitigated, not eliminated. Read
   the comment before acting on it, and do not let it trigger deployments.
-- **The diff is sent to the configured endpoint.** Whoever operates
-  `llm-base-url` can read your change. Use a self-hosted endpoint for code that
-  must not leave your infrastructure.
+- **The diff is sent to the configured endpoint.** See
+  [Where your diff goes](#where-your-diff-goes) above — the default model is not
+  zero-retention.
 - **It does not sandbox the model.** There is no retry-until-safe or output
   filtering beyond the prompt instructions.
 - **`pull_request_target` is dangerous by design.** Running Anubis on

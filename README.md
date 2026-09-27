@@ -63,9 +63,12 @@ That is the whole setup. No `actions/checkout` step is needed.
 - **Secrets are not readable inside `action.yml`.** Pass the key with
   `with: opencode-api-key: ${{ secrets.OPENCODE_API_KEY }}`. Any
   OpenAI-compatible key works, including Gemini and Ollama.
-- **Your diff is sent to the configured model endpoint.** On public
-  repositories, assume the provider can see the change. Point `llm-base-url` at
-  a self-hosted endpoint to keep it inside your infrastructure.
+- **Your diff is sent to the configured model endpoint, and the default model is
+  not zero-retention.** The full diff is uploaded on every review. OpenCode
+  states that `big-pickle` data may be used to improve the model during its free
+  period. Point `llm-base-url` at a self-hosted endpoint to keep the diff
+  inside your infrastructure. See
+  [Where your diff goes](SECURITY.md#where-your-diff-goes).
 - **Fork pull requests do not get secrets.** `pull_request` from a fork leaves
   `opencode-api-key` empty, so the review fails. Use `pull_request_target` only
   if you understand that it grants the pull request write access to your
@@ -127,8 +130,50 @@ export OPENCODE_API_KEY=<gemini-api-key>
   -llm-base-url http://localhost:11434/v1 -model qwen3-coder
 ```
 
-For GitHub Enterprise, set `-github-base-url` to your API root, for example
-`https://github.example.com/api/v3`.
+For GitHub Enterprise, leave `github-base-url` empty. The action reads the API
+root from the runner, so Enterprise works with no configuration. When running
+the CLI by hand outside Actions, pass the API root explicitly:
+
+```sh
+./anubis -repo owner/project -pr 42 \
+  -github-base-url https://github.example.com/api/v3
+```
+
+### Model compatibility
+
+Anubis speaks one protocol: OpenAI's `POST {base}/chat/completions`. It builds
+the URL from `-llm-base-url` and appends `/chat/completions` unless the value
+already ends in it, so all of these work:
+
+```
+https://opencode.ai/zen/v1                  -> .../v1/chat/completions
+https://opencode.ai/zen/v1/                 -> .../v1/chat/completions
+https://opencode.ai/zen/v1/chat/completions -> used as-is
+```
+
+**This matters for OpenCode Zen, which routes per model.** Zen does not serve
+every model from one endpoint:
+
+| Model family on Zen | Endpoint | Works with Anubis |
+| --- | --- | --- |
+| `big-pickle`, `qwen3.8-max`, `deepseek-v4*`, `glm-*`, `kimi-*`, `minimax-*` | `/zen/v1/chat/completions` | Yes |
+| `gpt-*`, `grok-*`, `muse-spark-*` | `/zen/v1/responses` | No |
+| `claude-*`, `qwen3.*-flash/plus` | `/zen/v1/messages` | No |
+| `gemini-*` | `/zen/v1/models/<id>` | No |
+
+Selecting a model from a row marked **No** will fail, because the request goes
+to `/chat/completions` and that model is not served there. Check
+<https://opencode.ai/docs/zen/#endpoints> before switching `-model` on Zen.
+
+To reach those models, point `-llm-base-url` at the matching path yourself and
+be aware that Anubis still speaks the chat-completions request and response
+shape, so it only works where that shape is also correct.
+
+### Cost
+
+`big-pickle` is currently free. Zen also **auto-reloads $20 when a balance drops
+below $5**, and that is on by default. Free models will not trigger it, but if
+you switch `-model` to a paid one, confirm your Zen auto-reload setting first.
 
 ## Limits and behavior worth knowing
 
@@ -178,8 +223,12 @@ analyze, never instructions to follow, which is the main defense against prompt
 injection through a malicious diff.
 
 That is a mitigation, not a guarantee. The model still writes the comment, so
-treat the output as untrusted until you have read it. See
-[SECURITY.md](SECURITY.md) for reporting a vulnerability.
+treat the output as untrusted until you have read it.
+
+Note that the default model is **not** zero-retention — see
+[Where your diff goes](SECURITY.md#where-your-diff-goes) before pointing this at
+a private repository. See [SECURITY.md](SECURITY.md) for reporting a
+vulnerability.
 
 ## Contributing
 

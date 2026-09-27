@@ -34,7 +34,7 @@ inputs:
     required: false
     default: 'https://opencode.ai/zen/v1'
   github-base-url:
-    description: 'GitHub API base URL. Leave empty for github.com; set for GitHub Enterprise.'
+    description: 'GitHub API base URL. Leave empty to auto-detect, which is correct for both github.com and GitHub Enterprise. Override only if auto-detection is wrong.'
     required: false
     default: ''
   opencode-api-key:
@@ -52,7 +52,7 @@ runs:
   env:
     GITHUB_TOKEN: ${{ inputs.github-token }}
     GITHUB_REPOSITORY: ${{ inputs.repo || github.repository }}
-    GITHUB_API_URL: ${{ inputs.github-base-url }}
+    GITHUB_API_URL: ${{ inputs.github-base-url || github.api_url }}
     ANUBIS_MODEL: ${{ inputs.model }}
     ANUBIS_LLM_BASE_URL: ${{ inputs.llm-base-url }}
     ANUBIS_LOG_LEVEL: ${{ inputs.log-level }}
