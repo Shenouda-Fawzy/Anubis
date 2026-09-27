@@ -1,0 +1,22 @@
+# Keep the build context small and free of secrets.
+#
+# The final image only receives /anubis, but the build stage does `COPY . .`, so
+# anything not excluded here is copied into /src and persists in intermediate
+# layers and build caches.
+
+# Local credentials. .env holds GITHUB_TOKEN and the model provider key.
+.env
+.env.*
+*.pem
+*.key
+
+# Version control. Whole history, and the only large thing in the context.
+.git
+
+# Build artifacts and reports. The image builds its own binary from source.
+anubis
+coverage.out
+
+# Editor and OS noise.
+.DS_Store
+*.swp

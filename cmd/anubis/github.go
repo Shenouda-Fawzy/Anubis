@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -16,15 +17,15 @@ type Client struct {
 	GhbClient  *ghb.Client
 }
 
-func NewGithubClient(token, baseURL string) *Client {
-	if baseURL == "" {
-		baseURL = "https://api.github.com"
+func NewGithubClient(token, baseURL string) (*Client, error) {
+	if strings.TrimSpace(baseURL) == "" {
+		baseURL = defaultGitHubBaseURL
 	}
+	httpClient := &http.Client{Timeout: httpTimeout}
 
-	httpClient := http.DefaultClient
 	opts := []ghb.ClientOptionsFunc{ghb.WithHTTPClient(httpClient)}
 	trimmedBaseURL := strings.TrimRight(baseURL, "/")
-	if trimmedBaseURL != "https://api.github.com" {
+	if trimmedBaseURL != defaultGitHubBaseURL {
 		sdkBaseURL := trimmedBaseURL
 		opts = append(opts, ghb.WithURLs(&sdkBaseURL, nil))
 	}
@@ -34,10 +35,10 @@ func NewGithubClient(token, baseURL string) *Client {
 
 	c, err := ghb.NewClient(opts...)
 	if err != nil {
-		slog.Error("failed to create github client", "error", err)
-		return nil
+		return nil, fmt.Errorf("create github client: %w", err)
 	}
-	return &Client{BaseURL: trimmedBaseURL, Token: token, HTTPClient: httpClient, GhbClient: c}
+	slog.Debug("github client configured", "base_url", trimmedBaseURL, "authenticated", token != "")
+	return &Client{BaseURL: trimmedBaseURL, Token: token, HTTPClient: httpClient, GhbClient: c}, nil
 }
 
 type PullRequest struct {
@@ -66,7 +67,7 @@ func (c *Client) GetPullRequest(ctx context.Context, owner, repo string, number 
 	return PullRequest{
 		Number:      pr.GetNumber(),
 		Title:       pr.GetTitle(),
-		Description: pr.GetDescription(),
+		Description: pr.GetBody(),
 		HTMLURL:     pr.GetHTMLURL(),
 	}, nil
 }
@@ -107,9 +108,15 @@ func (c *Client) ListFiles(ctx context.Context, owner, repo string, number int) 
 	}
 }
 
-func (c *Client) CreateComment(ctx context.Context, owner, repo string, number int, body string) error {
-	slog.Info("CreateComment started", "owner", owner, "repo", repo, "number", number)
-	defer slog.Debug("CreateComment done")
-	_, _, err := c.GhbClient.Issues.CreateComment(ctx, owner, repo, number, &ghb.IssueComment{Body: ghb.Ptr(body)})
-	return err
+// CreateComment posts body as a comment on the pull request and returns the URL
+// of the created comment.
+func (c *Client) CreateComment(ctx context.Context, owner, repo string, number int, body string) (string, error) {
+	slog.Info("publishing review comment", "owner", owner, "repo", repo, "number", number, "bytes", len(body))
+	created, _, err := c.GhbClient.Issues.CreateComment(ctx, owner, repo, number, &ghb.IssueComment{Body: ghb.Ptr(body)})
+	if err != nil {
+		return "", err
+	}
+	url := created.GetHTMLURL()
+	slog.Info("review comment published", "url", url)
+	return url, nil
 }

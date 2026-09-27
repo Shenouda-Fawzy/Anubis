@@ -1,6 +1,10 @@
 package main
 
-var reviewTask = `# Pull Request
+// reviewPrompt is the coordinator's user message. It is formatted with, in
+// order: repository, pull-request number, title, description, diff, and the
+// concatenated specialist findings. Every verb must stay in sync with
+// Coordinator.Review.
+var reviewPrompt = `# Pull Request
 
 <pr>
   <repository>%s</repository>

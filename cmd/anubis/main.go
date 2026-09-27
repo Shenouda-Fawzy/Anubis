@@ -11,17 +11,31 @@ import (
 	"time"
 )
 
-/*
-TODOs:
-  - [DONE] Parse error response
-  - [DONE] Write unit tests
-  - [DONE] Write integration tests
-  - [DONE] Write E2E tests
-  - [DONE] Use the standard library log/slog
-  - Document env vars
-  - Publish as Github action
-  - Use structured response
-*/
+// version is reported in the startup log line. Override at build time with
+// -ldflags "-X main.version=$(git describe --tags)".
+var version = "dev"
+
+// Defaults for the model provider. Any OpenAI-compatible endpoint works; these
+// point at OpenCode Zen's free tier so the CLI runs with no configuration.
+const (
+	defaultLLMBaseURL    = "https://opencode.ai/zen/v1"
+	defaultModel         = "big-pickle"
+	defaultGitHubBaseURL = "https://api.github.com"
+)
+
+// httpTimeout bounds a single GitHub or model API call so a hung connection
+// cannot stall a workflow indefinitely.
+const httpTimeout = 120 * time.Second
+
+// maxDiffBytes caps how much of a diff is sent to the model. Very large pull
+// requests are truncated with a marker rather than failing the request, because
+// most model context windows are far smaller than the API's own limits and a
+// hard failure here would be indistinguishable from a provider outage.
+const maxDiffBytes = 200_000
+
+// noFindingsComment is published when the review completes cleanly.
+const noFindingsComment = "No findings."
+
 func main() {
 	Review()
 }

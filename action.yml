@@ -1,36 +1,36 @@
 name: 'Anubis PR review'
-description: 'Concurrent, extensible pull-request review using Markdown review agents and an OpenAI-compatible model.'
+description: 'Parallel specialist AI reviewers analyze a pull-request diff, then a coordinator model deduplicates their findings into one high-signal review comment.'
 author: 'Shenouda Fawzy'
+
 branding:
   icon: 'shield'
   color: 'purple'
+
 inputs:
   github-token:
-    description: 'GitHub token with pull-request write access.'
+    description: >-
+      Token used to read the pull request and post the review comment.
+      Needs pull-requests: write to publish.
     required: false
     default: ${{ github.token }}
   repo:
-    description: 'Repository in owner/name form.'
-    required: false
-    default: ${{ github.repository }}
-  pr:
-    description: 'Pull request number to review.'
-    required: false
-    default: ${{ github.event.pull_request.number || '0' }}
-  publish:
-    description: 'Publish the review as a PR comment.'
-    required: false
-    default: 'true'
-  agents-dir:
-    description: 'Directory containing Markdown review agents (relative to the workspace). Leave empty for built-in agents.'
+    description: 'Repository in owner/name form. Leave empty to use the repository running the workflow.'
     required: false
     default: ''
+  pr:
+    description: 'Pull request number to review. Defaults to the pull request that triggered the workflow.'
+    required: false
+    default: ${{ github.event.pull_request.number }}
+  publish:
+    description: 'Post the review as a pull-request comment.'
+    required: false
+    default: 'true'
   model:
-    description: 'Chat model identifier.'
+    description: 'Chat model identifier passed to the OpenAI-compatible endpoint.'
     required: false
     default: 'big-pickle'
   llm-base-url:
-    description: 'OpenAI-compatible chat completions base URL.'
+    description: 'OpenAI-compatible /chat/completions base URL.'
     required: false
     default: 'https://opencode.ai/zen/v1'
   github-base-url:
@@ -38,22 +38,28 @@ inputs:
     required: false
     default: ''
   opencode-api-key:
-    description: 'OpenCode Zen API key (also accepts any OpenAI-compatible Bearer token).'
+    description: 'Bearer token for the model endpoint. Any OpenAI-compatible provider key works.'
     required: false
     default: ''
+  log-level:
+    description: 'Log verbosity: debug, info, warn or error. Note that debug still never logs diff content.'
+    required: false
+    default: 'info'
+
 runs:
   using: 'docker'
   image: 'Dockerfile'
   env:
     GITHUB_TOKEN: ${{ inputs.github-token }}
-    GITHUB_REPOSITORY: ${{ inputs.repo }}
-    ANUBIS_LLM_BASE_URL: ${{ inputs.llm-base-url }}
+    GITHUB_REPOSITORY: ${{ inputs.repo || github.repository }}
+    GITHUB_API_URL: ${{ inputs.github-base-url }}
     ANUBIS_MODEL: ${{ inputs.model }}
+    ANUBIS_LLM_BASE_URL: ${{ inputs.llm-base-url }}
+    ANUBIS_LOG_LEVEL: ${{ inputs.log-level }}
     OPENCODE_API_KEY: ${{ inputs.opencode-api-key }}
-    GITHUB_API_URL: ${{ inputs.github-base-url || github.api_url }}
   args:
     - -pr
     - ${{ inputs.pr }}
     - -publish=${{ inputs.publish }}
-    - -agents
-    - ${{ inputs.agents-dir }}
+    - -log-level
+    - ${{ inputs.log-level }}

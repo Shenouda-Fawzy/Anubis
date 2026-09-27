@@ -1,0 +1,71 @@
+name: Bug report
+description: Something in Anubis does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. If this is a security issue, do not use this form —
+        see SECURITY.md.
+
+  - type: input
+    id: version
+    attributes:
+      label: Anubis version or ref
+      placeholder: v1, or main as of <commit>
+    validations:
+      required: true
+
+  - type: input
+    id: mode
+    attributes:
+      label: How are you running it?
+      options:
+        - GitHub Action
+        - CLI binary
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+      description: What the documentation promised, in your own words.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead?
+      description: |
+        The error message or the comment Anubis posted. Please set
+        `log-level: debug` — the log never contains diff or prompt content.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: |
+        The smallest `pull_request` diff that triggers this, or the CLI
+        invocation with flags. Redact anything sensitive.
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model and base URL
+      placeholder: big-pickle at https://opencode.ai/zen/v1
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for this.
+        - label: I checked this is not a security issue, which belongs in SECURITY.md.

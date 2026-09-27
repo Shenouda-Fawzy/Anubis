@@ -1,2 +1,13 @@
+# Build artifacts
 /anubis
+coverage.out
+
+# Local credentials and editor state. These must never be committed: .env is
+# where the provider key and GITHUB_TOKEN live during local testing.
 .env
+.env.*
+*.pem
+*.key
+
+.DS_Store
+*.swp

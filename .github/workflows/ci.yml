@@ -1,29 +1,82 @@
-# name: CI
+name: CI
 
-# on:
-#   push:
-#     branches: [main]
-#   pull_request:
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
 
-# jobs:
-#   test:
-#     runs-on: ubuntu-latest
-#     steps:
-#       - uses: actions/checkout@v4
-#       - uses: actions/setup-go@v5
-#         with:
-#           go-version-file: go.mod
-#       - name: Format check
-#         run: |
-#           test -z "$(gofmt -l cmd pkg)"
-#       - name: Vet
-#         run: go vet ./...
-#       - name: Test
-#         run: go test ./...
+permissions:
+  contents: read
 
-#   docker:
-#     runs-on: ubuntu-latest
-#     steps:
-#       - uses: actions/checkout@v4
-#       - name: Build image
-#         run: docker build -t anubis:test .
+env:
+  GO_VERSION: '1.26'
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: gofmt
+        run: test -z "$(gofmt -l cmd)"
+
+      - name: go vet
+        run: go vet ./...
+
+      # The suite is hermetic: it uses local httptest servers for GitHub and the
+      # model provider, so no secrets or network access are required.
+      - name: go test
+        run: go test -race -coverprofile=coverage.out ./...
+
+      - name: go test (coverage)
+        run: go tool cover -func=coverage.out
+
+      # A hand-edited module cache makes a build succeed locally and fail in
+      # CI, which is a confusing way to discover that the code only ever
+      # compiled against a patched dependency.
+      - name: go mod verify
+        run: go mod verify
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # GitHub builds the runtime image from this Dockerfile for every action
+      # run, so a broken build breaks everyone's workflows.
+      - name: Build image
+        run: docker build -t anubis:test .
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          container=$(docker create anubis:test)
+          trap 'docker rm -f "$container" >/dev/null' EXIT
+          # With no arguments the CLI must fail with usage, not a crash.
+          if docker run --rm anubis:test >/dev/null 2>&1; then
+            echo "expected a non-zero exit without -repo/-pr" >&2
+            exit 1
+          fi
+          docker run --rm anubis:test -h 2>&1 | grep -q -- "-llm-base-url"

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -35,7 +36,8 @@ func TestMain(m *testing.M) {
 	}
 	e2eBinaryPath = filepath.Join(tmp, "anubis")
 
-	// #nosec G204 -- test-only: command and args are constant except for a path under our own os.MkdirTemp dir
+	// #nosec G204 -- test-only: constant command; e2eBinaryPath is a file this
+	// test created under its own os.MkdirTemp directory.
 	cmd := exec.Command("go", "build", "-o", e2eBinaryPath, ".")
 	cmd.Dir = filepath.Join(root, "cmd", "anubis")
 	cmd.Stdout = os.Stdout
@@ -71,7 +73,7 @@ func moduleRoot() string {
 const (
 	e2eOwner      = "acme"
 	e2eRepo       = "widgets"
-	e2eAgentCount = 3
+	e2eAgentCount = 4
 )
 
 const e2ePRJSON = `{
@@ -95,6 +97,7 @@ index 1234567..89abcde 100644
 
 const (
 	e2eSecurityFinding    = "Security finding: user-supplied id is interpolated into the SQL query."
+	e2eCorrectnessFinding = "Correctness finding: the new handler never writes a response on the empty-id path."
 	e2ePerformanceFinding = "Performance finding: the inner loop runs in O(n^2) over the user list."
 	e2eStandardsFinding   = "Coding standards finding: the error return from db.Close is ignored."
 )
@@ -200,7 +203,7 @@ func (m *mockLLM) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	switch {
-	case strings.Contains(user, "# Pull Request"):
+	case strings.Contains(user, "<reviewer_findings>"):
 		m.mu.Lock()
 		m.synthesisCalls++
 		m.mu.Unlock()
@@ -210,6 +213,11 @@ func (m *mockLLM) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		m.agentCalls++
 		m.mu.Unlock()
 		_, _ = w.Write(llmResponseJSON(e2eSecurityFinding))
+	case strings.Contains(user, "concrete bugs, incorrect edge cases"):
+		m.mu.Lock()
+		m.agentCalls++
+		m.mu.Unlock()
+		_, _ = w.Write(llmResponseJSON(e2eCorrectnessFinding))
 	case strings.Contains(user, "avoidable latency"):
 		m.mu.Lock()
 		m.agentCalls++
@@ -280,15 +288,22 @@ func runAnubis(t *testing.T, args ...string) (output string, exitCode int) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, e2eBinaryPath, args...)
-	cmd.Env = append(
-		os.Environ(),
+	// #nosec G204 -- test-only: e2eBinaryPath is a file this test created under
+	// its own os.MkdirTemp directory, and every arg is a test constant.
+	cmd := exec.CommandContext(ctx, e2eBinaryPath, args...) // #nosec G204
+	// Clear every provider variable so the test exercises the documented
+	// OPENCODE_API_KEY path rather than inheriting the developer's shell.
+	cmd.Env = append(os.Environ(),
 		"GITHUB_TOKEN=e2e-token",
-		"AI_API_KEY=e2e-key",
+		"OPENCODE_API_KEY=e2e-key",
+		"AI_API_KEY=",
+		"OPENAI_API_KEY=",
+		"GEMINI_API_KEY=",
 	)
 	combined, err := cmd.CombinedOutput()
 	if err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
 			return string(combined), ee.ExitCode()
 		}
 		t.Fatalf("run anubis: %v\n%s", err, combined)
