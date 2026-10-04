@@ -1,0 +1,96 @@
+name: Release
+
+# Tag-driven on purpose: cutting a release stays a human decision (push the
+# tag), while the gates, the release notes and the floating v1 tag are
+# automated. The README pins @v1, so something has to keep moving that tag.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  GO_VERSION: '1.26'
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history and tags: the tag-membership check and the v1 tag
+          # update both need the rest of the graph.
+          fetch-depth: 0
+
+      # A tag that is not on main is a release nobody tested in CI, because CI
+      # only runs on pushes to main and on pull requests.
+      - name: Require the tag to be on main
+        run: git merge-base --is-ancestor "$GITHUB_REF_NAME" origin/main
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: gofmt
+        run: test -z "$(gofmt -l cmd)"
+
+      - name: go vet
+        run: go vet ./...
+
+      # The suite is hermetic: local httptest servers stand in for the GitHub
+      # API and the model provider, so this needs no secrets.
+      - name: go test
+        run: go test -race ./...
+
+      - name: Build the static binary
+        run: |
+          set -euo pipefail
+          make build VERSION="$GITHUB_REF_NAME"
+          mkdir -p dist
+          mv anubis dist/anubis-linux-amd64
+          cd dist
+          sha256sum anubis-linux-amd64 > anubis-linux-amd64.sha256
+          cat anubis-linux-amd64.sha256
+
+      - name: Build the runtime image
+        run: docker build -t "anubis:$GITHUB_REF_NAME" .
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" --title "$TAG" --generate-notes dist/*
+          fi
+
+      - name: Move the floating v1 tag
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+
+          # v1 must never point at a v2 release: a consumer pinning @v1 has to
+          # keep getting a v1.
+          case "$tag" in
+            v1.*) ;;
+            *) echo "$tag is not a v1 release; leaving v1 alone"; exit 0 ;;
+          esac
+
+          # And it must never move backwards, so re-running an older tag does
+          # not repoint the major tag at older code. sort -V puts v1.0.10 after
+          # v1.0.9, which a plain string compare does not.
+          if git rev-parse -q --verify refs/tags/v1 >/dev/null; then
+            current=$(git describe --tags --match 'v1.*' "$(git rev-list -n1 v1)" 2>/dev/null || echo '')
+            if [ -n "$current" ] && [ "$(printf '%s\n%s\n' "$tag" "$current" | sort -V | tail -1)" = "$current" ]; then
+              echo "v1 is at $current, which is not older than $tag; leaving it alone"
+              exit 0
+            fi
+          fi
+
+          git tag -f v1 "$tag"
+          git push origin refs/tags/v1 --force

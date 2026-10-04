@@ -1,5 +1,9 @@
 # Anubis
 
+[![CI](https://github.com/Shenouda-Fawzy/Anubis/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Shenouda-Fawzy/Anubis/actions/workflows/ci.yml)
+[![action version](https://img.shields.io/github/v/release/Shenouda-Fawzy/Anubis?label=action%20v1)](https://github.com/Shenouda-Fawzy/Anubis/releases/latest)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Anubis reviews pull requests with a panel of specialist AI reviewers, then has a
 coordinator validate and deduplicate their findings into one high-signal review
 that it posts as a pull-request comment.
