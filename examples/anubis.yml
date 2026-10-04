@@ -1,0 +1,70 @@
+# Anubis PR review — complete example.
+#
+# Copy this file to .github/workflows/anubis.yml in your repository. Every input
+# the action accepts is written out below, including the two you always need:
+# a GitHub token and a model. Nothing here is required beyond the two secrets,
+# but an explicit file is easier to adapt than one that leans on defaults you
+# cannot see.
+#
+# Before it runs, add two secrets under Settings > Secrets and variables >
+# Actions, both at repository scope:
+#
+#   ANUBIS_LLM_API_KEY   the model provider's key. Anubis speaks one protocol,
+#                        so this is whichever provider you point llm-base-url
+#                        at — see docs/providers.md for each one's base URL.
+#   GITHUB_TOKEN         GitHub creates this for you; do not add it by hand.
+#
+# GITHUB_TOKEN is passed explicitly rather than left to the action's default so
+# that the token requirement is visible in one place.
+
+name: Anubis review
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# One review per pull request. A new push cancels the run in flight, so a busy
+# pull request does not queue up a backlog of expensive reviews.
+concurrency:
+  group: anubis-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  anubis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: Shenouda-Fawzy/Anubis@v1
+        with:
+          # Github token with pull_request: read/write access
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+          # Both default to the repository and pull request running this workflow
+          repo: ${{ github.repository }}
+          pr: ${{ github.event.pull_request.number }}
+
+          # To publish the review as comment
+          publish: 'true'
+
+          # Only needed for GitHub Enterprise, and only if auto-detection picks
+          # the wrong root. Empty auto-detects, which is correct for both
+          # github.com and GitHub Enterprise. For Enterprise, set it to your API
+          # root, for example https://github.example.com/api/v3.
+          github-base-url: ''
+
+          # API key from your LLM provider
+          anubis-llm-api-key: ${{ secrets.ANUBIS_LLM_API_KEY }}
+
+          # DeepSeek is used here because it is cheap and needs no account
+          # approval. Note the base URL has no /v1 suffix — copy each provider's
+          # exactly as docs/providers.md lists it.
+          llm-base-url: https://api.deepseek.com
+          model: deepseek-chat
+
+          # Control whether sub-agents runs concurrently, max=4.
+          max-concurrency: '1'
+
+          # allowed options [info, debug, warning, error]
+          log-level: info

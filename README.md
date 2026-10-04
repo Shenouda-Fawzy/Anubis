@@ -12,6 +12,8 @@ Static Go binary, Docker-based GitHub Action. No server, nothing to host.
 
 ## As an action
 
+The minimum that works. Copy this into `.github/workflows/anubis.yml`:
+
 ```yaml
 name: Anubis review
 on: [pull_request]
@@ -27,7 +29,22 @@ jobs:
           anubis-llm-api-key: ${{ secrets.ANUBIS_LLM_API_KEY }}
 ```
 
-That is the whole setup — no `actions/checkout` step needed.
+Two things to set up, and one of them is GitHub's job, not yours:
+
+1. Add **one** secret, `ANUBIS_LLM_API_KEY`, holding your model provider's key
+   (Settings → Secrets and variables → Actions).
+2. Nothing for the GitHub token. It defaults to `${{ github.token }}`, which
+   `pull-requests: write` above is enough to post a comment with.
+
+Everything else has a default: the model is OpenCode Zen's free `big-pickle`,
+the pull request is whichever one triggered the run, and the review is posted
+as a comment. No `actions/checkout` step, because Anubis fetches the diff over
+the API rather than from a working tree.
+
+**[`examples/anubis.yml`](examples/anubis.yml) is the complete configuration** —
+all ten inputs written out, including the GitHub token, the model and the
+endpoint, with the reasoning for each in comments. That file is the reference;
+this page keeps only the minimum you need to get the first review.
 
 ## As a CLI
 

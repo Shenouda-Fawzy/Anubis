@@ -9,6 +9,7 @@ and nothing to host.
 | [Providers](providers.md) | Which providers and models work, how to configure each, what a review costs, and where your diff goes. |
 | [Behavior](behavior.md) | Diff truncation, partial failure, logging, and concurrency. |
 | [Development](development.md) | Building, testing, and how the code is laid out. |
+| [examples/anubis.yml](../examples/anubis.yml) | The complete configuration: every input, with the reasoning for each. |
 
 Security policy and vulnerability reporting live in
 [SECURITY.md](../SECURITY.md), which is kept at the repository root by

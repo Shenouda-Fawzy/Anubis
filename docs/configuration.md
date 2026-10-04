@@ -7,6 +7,9 @@ action works with a single input.
 
 Passed with `with:` in your workflow step.
 
+[`examples/anubis.yml`](../examples/anubis.yml) is a complete workflow with all
+ten of these written out, if you would rather copy than assemble.
+
 | Input | Default | Purpose |
 | --- | --- | --- |
 | `github-token` | `${{ github.token }}` | Reads the pull request and posts the comment. Needs `pull-requests: write`. |
