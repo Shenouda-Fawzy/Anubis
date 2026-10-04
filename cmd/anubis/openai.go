@@ -113,7 +113,7 @@ func (o *OpenAIClient) Complete(ctx context.Context, req *CompletionRequest) (*C
 		return nil, errors.New("no model base URL configured: set -llm-base-url or ANUBIS_LLM_BASE_URL")
 	}
 	if o.APIKey == "" {
-		return nil, errors.New("no model API key configured: set one of OPENCODE_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY or AI_API_KEY")
+		return nil, errors.New("no model API key configured: set ANUBIS_LLM_API_KEY to your provider's key (see docs/providers.md)")
 	}
 	url := strings.TrimRight(o.BaseURL, "/")
 	if strings.HasSuffix(url, "/chat/completions") == false {

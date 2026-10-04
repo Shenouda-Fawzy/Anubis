@@ -292,13 +292,16 @@ func runAnubis(t *testing.T, args ...string) (output string, exitCode int) {
 	// its own os.MkdirTemp directory, and every arg is a test constant.
 	cmd := exec.CommandContext(ctx, e2eBinaryPath, args...) // #nosec G204
 	// Clear every provider variable so the test exercises the documented
-	// OPENCODE_API_KEY path rather than inheriting the developer's shell.
+	// ANUBIS_LLM_API_KEY path rather than inheriting the developer's shell. The
+	// provider-named ones are emptied as well: Anubis must not read them, and an
+	// end-to-end run that passed because one leaked in would hide that.
 	cmd.Env = append(os.Environ(),
 		"GITHUB_TOKEN=e2e-token",
-		"OPENCODE_API_KEY=e2e-key",
-		"AI_API_KEY=",
+		"ANUBIS_LLM_API_KEY=e2e-key",
+		"OPENCODE_API_KEY=",
 		"OPENAI_API_KEY=",
 		"GEMINI_API_KEY=",
+		"AI_API_KEY=",
 	)
 	combined, err := cmd.CombinedOutput()
 	if err != nil {

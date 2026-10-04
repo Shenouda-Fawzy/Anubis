@@ -39,8 +39,8 @@ inputs:
     description: 'GitHub API base URL. Leave empty to auto-detect, which is correct for both github.com and GitHub Enterprise. Override only if auto-detection is wrong.'
     required: false
     default: ''
-  opencode-api-key:
-    description: 'Bearer token for the model endpoint. Any OpenAI-compatible provider key works.'
+  anubis-llm-api-key:
+    description: 'Bearer token for the model endpoint. Works with any OpenAI-compatible provider; see docs/providers.md for the base URL of each one.'
     required: false
     default: ''
   log-level:
@@ -55,6 +55,11 @@ inputs:
 runs:
   using: 'docker'
   image: 'Dockerfile'
+  # Two conventions hold this block together. Every variable Anubis owns is
+  # prefixed ANUBIS_, so nothing here can collide with a caller's environment
+  # and the provider is never named: one client, many providers. The GITHUB_*
+  # names are GitHub's own contract, set by the runner and read by convention
+  # across the ecosystem, so they are deliberately not prefixed.
   env:
     GITHUB_TOKEN: ${{ inputs.github-token }}
     GITHUB_REPOSITORY: ${{ inputs.repo || github.repository }}
@@ -63,7 +68,7 @@ runs:
     ANUBIS_LLM_BASE_URL: ${{ inputs.llm-base-url }}
     ANUBIS_LOG_LEVEL: ${{ inputs.log-level }}
     ANUBIS_MAX_CONCURRENCY: ${{ inputs.max-concurrency }}
-    OPENCODE_API_KEY: ${{ inputs.opencode-api-key }}
+    ANUBIS_LLM_API_KEY: ${{ inputs.anubis-llm-api-key }}
   args:
     # -pr and -publish have no environment fallback; everything else is passed
     # as an environment variable above. Keeping one source of truth per setting

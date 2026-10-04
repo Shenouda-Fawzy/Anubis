@@ -6,10 +6,13 @@
 #   PR            - pull request number
 #   publish       - pass "publish" to also post the review as a PR comment
 #
-# Requires GITHUB_TOKEN and a model provider key in the environment
-# (OPENCODE_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY or AI_API_KEY).
-# With neither set the run uses OpenCode Zen's free big-pickle model, which
-# still needs a key: OPENCODE_API_KEY.
+# Requires GITHUB_TOKEN and a model provider key in the environment. The
+# credential variable is ANUBIS_LLM_API_KEY and is the only one read: it names no
+# provider, because any OpenAI-compatible endpoint works. See
+# docs/providers.md for each one's base URL.
+#
+# With no key set the run still uses OpenCode Zen's free big-pickle model, which
+# also needs a key: ANUBIS_LLM_API_KEY.
 #
 # Override the provider with MODEL, LLM_BASE_URL and REPO_ROOT.
 set -eu

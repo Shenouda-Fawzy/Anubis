@@ -57,7 +57,10 @@ body:
   - type: input
     id: model
     attributes:
-      label: Model and base URL
+      label: Provider, model and base URL
+      description: |
+        Which provider and model, and the `llm-base-url` you set. A non-default
+        endpoint is the usual cause of a failure.
       placeholder: big-pickle at https://opencode.ai/zen/v1
     validations:
       required: false

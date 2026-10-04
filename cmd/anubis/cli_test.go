@@ -7,49 +7,46 @@ import (
 	"testing"
 )
 
-// The provider variable a consumer sets must actually be the one Anubis reads.
-// This failed silently before: the action exported OPENCODE_API_KEY while the
-// code read only AI_API_KEY, so every published run died on a missing key.
-func TestLLMAPIKeyFallbackOrder(t *testing.T) {
-	all := []string{"OPENCODE_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "AI_API_KEY"}
-	clearKeys(t, all...)
+// providerNamedKeyVars are the credentials Anubis used to fall back through
+// before the variable was renamed. They must stay unread: a key that works only
+// when the user guesses a provider name is a bug, not a convenience.
+var providerNamedKeyVars = []string{
+	"OPENCODE_API_KEY",
+	"OPENAI_API_KEY",
+	"GEMINI_API_KEY",
+	"AI_API_KEY",
+}
 
+// The variable a consumer sets must be the one Anubis reads. This failed
+// silently once already: the action exported OPENCODE_API_KEY while the code
+// read only AI_API_KEY, so every published run died on a missing key.
+func TestLLMAPIKeyReadsDocumentedVariable(t *testing.T) {
 	cases := []struct {
 		name string
 		set  map[string]string
 		want string
 	}{
-		{"none set", nil, ""},
-		{"documented variable", map[string]string{"OPENCODE_API_KEY": "k1"}, "k1"},
-		{"openai", map[string]string{"OPENAI_API_KEY": "k2"}, "k2"},
-		{"gemini", map[string]string{"GEMINI_API_KEY": "k3"}, "k3"},
-		{"legacy ai key", map[string]string{"AI_API_KEY": "k4"}, "k4"},
+		{"unset", nil, ""},
+		{"empty", map[string]string{"ANUBIS_LLM_API_KEY": ""}, ""},
+		{"whitespace only", map[string]string{"ANUBIS_LLM_API_KEY": "  \t "}, ""},
+		{"documented variable", map[string]string{"ANUBIS_LLM_API_KEY": "k0"}, "k0"},
+		{"value is trimmed", map[string]string{"ANUBIS_LLM_API_KEY": "  k0  "}, "k0"},
 		{
-			"precedence: opencode wins",
-			map[string]string{"OPENCODE_API_KEY": "k1", "OPENAI_API_KEY": "k2", "GEMINI_API_KEY": "k3", "AI_API_KEY": "k4"},
-			"k1",
+			"provider-named variable alone does not count",
+			map[string]string{"OPENAI_API_KEY": "k2", "GEMINI_API_KEY": "k3"},
+			"",
 		},
 		{
-			"precedence: openai over gemini",
-			map[string]string{"OPENAI_API_KEY": "k2", "GEMINI_API_KEY": "k3", "AI_API_KEY": "k4"},
-			"k2",
+			"documented variable wins over a provider-named one",
+			map[string]string{"ANUBIS_LLM_API_KEY": "k0", "OPENAI_API_KEY": "k2"},
+			"k0",
 		},
-		{
-			"precedence: gemini over legacy",
-			map[string]string{"GEMINI_API_KEY": "k3", "AI_API_KEY": "k4"},
-			"k3",
-		},
-		{
-			"empty value is skipped",
-			map[string]string{"OPENCODE_API_KEY": "  ", "GEMINI_API_KEY": "k3"},
-			"k3",
-		},
-		{"value is trimmed", map[string]string{"OPENCODE_API_KEY": "  k1  "}, "k1"},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			clearKeys(t, all...)
+			clearKeys(t, "ANUBIS_LLM_API_KEY")
+			clearKeys(t, providerNamedKeyVars...)
 			for k, v := range tc.set {
 				t.Setenv(k, v)
 			}
@@ -57,6 +54,39 @@ func TestLLMAPIKeyFallbackOrder(t *testing.T) {
 				t.Errorf("llmAPIKey() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// Reading a provider-named variable is the failure mode this rename exists to
+// remove, and it is invisible until a user on a non-default provider cannot work
+// out which variable to set. Asserting the absence keeps it gone.
+func TestLLMAPIKeyIgnoresProviderNamedVariables(t *testing.T) {
+	t.Setenv("ANUBIS_LLM_API_KEY", "")
+	for _, name := range providerNamedKeyVars {
+		t.Setenv(name, "should-be-ignored")
+	}
+	if got := llmAPIKey(); got != "" {
+		t.Errorf("llmAPIKey() = %q, want empty: a provider-named variable supplied the key", got)
+	}
+}
+
+// Anubis speaks one protocol to many providers, so the credential it asks for
+// must carry the project prefix and name no product.
+func TestDocumentedAPIKeyIsProviderAgnostic(t *testing.T) {
+	const name = "ANUBIS_LLM_API_KEY"
+	if llmAPIKeyEnvVar != name {
+		t.Errorf("llmAPIKeyEnvVar = %q, want %q", llmAPIKeyEnvVar, name)
+	}
+	if !strings.HasPrefix(llmAPIKeyEnvVar, "ANUBIS_") {
+		t.Errorf("credential variable %q is not prefixed ANUBIS_", llmAPIKeyEnvVar)
+	}
+	for _, banned := range []string{"OPEN", "GEMINI", "GROQ", "OPENROUTER", "ANTHROPIC", "DEEPSEEK", "MISTRAL", "XAI", "GOOGLE"} {
+		if strings.Contains(llmAPIKeyEnvVar, banned) {
+			t.Errorf("credential variable %q names the provider %q", llmAPIKeyEnvVar, banned)
+		}
+	}
+	if !strings.Contains(longHelp(), "ANUBIS_LLM_API_KEY") {
+		t.Error("help text does not document ANUBIS_LLM_API_KEY")
 	}
 }
 
@@ -83,7 +113,7 @@ func TestLongHelpMatchesDocumentedFlags(t *testing.T) {
 	help := longHelp()
 	for _, want := range []string{
 		"-repo", "-pr", "-model", "-llm-base-url", "-github-base-url", "-github-token",
-		"-publish", "-log-level", "OPENCODE_API_KEY", defaultModel, defaultLLMBaseURL,
+		"-publish", "-log-level", "ANUBIS_LLM_API_KEY", defaultModel, defaultLLMBaseURL,
 	} {
 		if !strings.Contains(help, want) {
 			t.Errorf("help text is missing %q", want)

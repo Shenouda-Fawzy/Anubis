@@ -67,7 +67,7 @@ prompt edit changes every review for every user, so:
 Conventional-ish, one logical change per commit, imperative subject line:
 
 ```text
-fix: use the documented OPENCODE_API_KEY variable
+fix: use the documented ANUBIS_LLM_API_KEY variable
 fix(coordinator): pass the PR number to the synthesis prompt
 test: cover the API key fallback order
 docs: correct the action input table

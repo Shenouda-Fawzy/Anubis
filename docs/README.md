@@ -6,7 +6,7 @@ and nothing to host.
 | Page | Covers |
 | --- | --- |
 | [Configuration](configuration.md) | Every action input, CLI flag and environment variable. |
-| [Providers](providers.md) | Which models and endpoints work, what a review costs, and where your diff goes. |
+| [Providers](providers.md) | Which providers and models work, how to configure each, what a review costs, and where your diff goes. |
 | [Behavior](behavior.md) | Diff truncation, partial failure, logging, and concurrency. |
 | [Development](development.md) | Building, testing, and how the code is laid out. |
 

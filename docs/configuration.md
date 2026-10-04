@@ -16,7 +16,7 @@ Passed with `with:` in your workflow step.
 | `model` | `big-pickle` | Chat model identifier. Must be served by the configured endpoint — see [Providers](providers.md). |
 | `llm-base-url` | `https://opencode.ai/zen/v1` | OpenAI-compatible base URL. Anubis appends `/chat/completions` unless the value already ends in it. |
 | `github-base-url` | *(empty)* | Leave empty. The action reads the correct API root from the runner, which is right for both github.com and GitHub Enterprise. |
-| `opencode-api-key` | *(empty)* | Bearer token for the model endpoint. Any OpenAI-compatible key works. |
+| `anubis-llm-api-key` | *(empty)* | Bearer token for the model endpoint. Works with any OpenAI-compatible provider — see [Providers](providers.md) for each one's base URL. |
 | `log-level` | `info` | `debug`, `info`, `warn` or `error`. Debug never logs diff content. |
 | `max-concurrency` | `1` | How many specialists may run at once. `1` runs them one after another — see [Concurrency](behavior.md#concurrency). |
 
@@ -40,7 +40,7 @@ Run `./anubis -h` for the same list with fuller descriptions.
 | Variable | Purpose |
 | --- | --- |
 | `GITHUB_TOKEN` | Reads the PR and posts the comment. |
-| `OPENCODE_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `AI_API_KEY` | Model provider credential, tried in that order. The first non-empty value wins. |
+| `ANUBIS_LLM_API_KEY` | Model provider credential. The documented name, and the only one Anubis reads. It does not name a provider, because Anubis speaks one protocol to all of them. |
 | `GITHUB_REPOSITORY` | Default for `-repo`. |
 | `GITHUB_API_URL` | Default for `-github-base-url`. |
 | `ANUBIS_MODEL`, `ANUBIS_LLM_BASE_URL`, `ANUBIS_LOG_LEVEL` | Defaults for the matching flags. |
@@ -72,7 +72,7 @@ explicitly:
 ## Fork pull requests
 
 `pull_request` from a fork does not expose repository secrets, so
-`opencode-api-key` arrives empty and the review fails with a clear error rather
+`anubis-llm-api-key` arrives empty and the review fails with a clear error rather
 than a confusing one.
 
 `pull_request_target` does receive the secret, but it also grants the pull

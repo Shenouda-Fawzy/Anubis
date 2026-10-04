@@ -149,17 +149,20 @@ func caveats(c *Coordinator) string {
 	return b.String()
 }
 
-// llmAPIKey resolves the model provider credential. Providers disagree on the
-// variable name, so the documented ones are tried in order and the first
-// non-empty value wins: OPENCODE_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, then
-// AI_API_KEY.
+// llmAPIKeyEnvVar is the model-provider credential Anubis reads, and the only
+// one. It is prefixed ANUBIS_ and deliberately names no provider: Anubis speaks
+// one protocol to all of them, so the credential is whoever serves the model's
+// key rather than a product Anubis has an opinion about. Provider-named
+// variables such as OPENAI_API_KEY are not read, and must not be reintroduced —
+// TestLLMAPIKeyIgnoresProviderNamedVariables exists to keep it that way.
+//
+//nolint:gosec // G101: this is an environment variable *name*, not a credential.
+const llmAPIKeyEnvVar = "ANUBIS_LLM_API_KEY"
+
+// llmAPIKey returns the configured provider credential, trimmed so a stray
+// newline from a secret store cannot produce a confusing 401.
 func llmAPIKey() string {
-	for _, name := range []string{"OPENCODE_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "AI_API_KEY"} {
-		if v := strings.TrimSpace(os.Getenv(name)); v != "" {
-			return v
-		}
-	}
-	return ""
+	return strings.TrimSpace(os.Getenv(llmAPIKeyEnvVar))
 }
 
 // failureComment builds the PR comment posted when the review couldn't
@@ -209,8 +212,11 @@ Flags:
 Environment:
   GITHUB_TOKEN
         token used to read the pull request and post the review comment
-  OPENCODE_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY or AI_API_KEY
-        API key for the model provider, tried in that order
+  ANUBIS_LLM_API_KEY
+        API key for the model endpoint. Any OpenAI-compatible provider works;
+        see docs/providers.md for the base URL of each supported one.
+  ANUBIS_LLM_BASE_URL, ANUBIS_MODEL
+        base URL and model of that endpoint
   ANUBIS_MAX_CONCURRENCY
         how many specialist reviewers may run at once (default ` + strconv.Itoa(defaultMaxConcurrency) + `, which runs them one after another). Raise it to trade rate-limit headroom for wall-clock time.
 

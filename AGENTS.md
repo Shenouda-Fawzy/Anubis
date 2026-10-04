@@ -43,10 +43,24 @@ a PR comment.
 
 ## Non-obvious behavior
 
-- **The API key is resolved through a fallback chain**, not a single variable:
-  `OPENCODE_API_KEY` → `OPENAI_API_KEY` → `GEMINI_API_KEY` → `AI_API_KEY`
-  (`llmAPIKey` in `cli.go`). `action.yml` sets `OPENCODE_API_KEY`. If you change
-  the chain, change `action.yml`, `docs/configuration.md` and `TestLLMAPIKeyFallbackOrder`.
+- **There is exactly one credential variable: `ANUBIS_LLM_API_KEY`.** It is a bare
+  `os.Getenv` in `llmAPIKey` (`cli.go`), paired with the `anubis-llm-api-key`
+  action input. Earlier versions fell back through `OPENCODE_API_KEY`,
+  `OPENAI_API_KEY`, `GEMINI_API_KEY` and `AI_API_KEY`; that chain is gone and must
+  not come back. `TestLLMAPIKeyIgnoresProviderNamedVariables` fails if any
+  provider-named variable ever supplies a key again. If you rename the variable,
+  change `cli.go`, `action.yml`, `docs/configuration.md`, the help text and
+  `TestLLMAPIKeyReadsDocumentedVariable` together.
+- **Every variable Anubis owns is prefixed `ANUBIS_`.** Nothing in the codebase may
+  name a model provider in a variable, flag or input: one protocol, many
+  providers, and the credential is the provider's key whoever serves it. The
+  `GITHUB_*` names are the deliberate exception — they are GitHub's own contract,
+  set by the runner and read by convention across the ecosystem.
+- **Provider support is a documentation claim, not a code path.** Anubis has no
+  per-provider logic; `docs/providers.md` lists base URLs that were checked against
+  each vendor's documentation. Those URLs go stale — GitHub Models was retired in
+  July 2026 — so re-verify before adding a row and never present a row as tested
+  when it was only read.
 - **The coordinator template has six verbs and six arguments.** `reviewPrompt`
   is formatted with repo, PR number, title, description, diff, findings. A short
   argument list silently shifts every value and injects `%!s(MISSING)`.
@@ -76,6 +90,11 @@ a PR comment.
 - **Model defaults are OpenCode Zen's free `big-pickle`** at
   `https://opencode.ai/zen/v1`. Any OpenAI-compatible endpoint works, including
   a local Ollama at `http://localhost:11434/v1`.
+- **The request body is only `model` + `messages`.** No `temperature`,
+  `max_tokens`, `stream` or `response_format`, and `finish_reason` must be exactly
+  `"stop"` or the response is discarded as truncated. This is deliberate: it keeps
+  the compatibility surface small, and it means truncation comes from the model's
+  context window rather than a cap we set.
 - **Logs go to stderr** via `log/slog` as structured text. ANSI color only for a
   TTY unless forced with `ANUBIS_LOG_COLOR=always`; `NO_COLOR` disables it.
 - **Markdown-defined agents are not part of the initial release.** There is no

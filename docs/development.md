@@ -88,9 +88,11 @@ a new dependency needs a reason stated in the PR.
 These are the things that break quietly if you are not careful. `AGENTS.md` in
 the repository root carries the full list.
 
-- **The API key is a fallback chain, not one variable.** `OPENCODE_API_KEY` →
-  `OPENAI_API_KEY` → `GEMINI_API_KEY` → `AI_API_KEY`. Change it in `cli.go`,
-  `action.yml`, the docs table and `TestLLMAPIKeyFallbackOrder` together.
+- **The API key is one variable, not a chain.** `ANUBIS_LLM_API_KEY`, read by
+  `llmAPIKey` in `cli.go`. Provider-named variables such as `OPENAI_API_KEY` are
+  deliberately unread, so a credential never has to match the product serving the
+  model. Change it in `cli.go`, `action.yml`, the docs table and
+  `TestLLMAPIKeyReadsDocumentedVariable` together.
 - **The synthesis template has six verbs and six arguments.** A short argument
   list silently shifts every value and injects `%!s(MISSING)`.
   `TestReviewPromptArgumentsAreAligned` exists to catch that.

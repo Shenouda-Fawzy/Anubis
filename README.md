@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: Shenouda-Fawzy/Anubis@v1
         with:
-          opencode-api-key: ${{ secrets.OPENCODE_API_KEY }}
+          anubis-llm-api-key: ${{ secrets.ANUBIS_LLM_API_KEY }}
 ```
 
 That is the whole setup — no `actions/checkout` step needed.
@@ -34,7 +34,7 @@ That is the whole setup — no `actions/checkout` step needed.
 ```sh
 make build
 export GITHUB_TOKEN=...
-export OPENCODE_API_KEY=...
+export ANUBIS_LLM_API_KEY=...
 
 ./anubis -repo owner/repo -pr 42 -publish
 ```
@@ -47,6 +47,44 @@ Four specialists — `security`, `correctness`, `performance` and
 `maintainability` — review the diff one at a time, each with a different focus. A
 coordinator then discards false positives, deduplicates by root cause, and
 re-grades severity. The result is posted as a comment.
+
+## Providers
+
+Anubis speaks one protocol — OpenAI's `POST {base}/chat/completions` — so switching
+provider is a URL and a key. No adapter, no code change:
+
+```yaml
+- uses: Shenouda-Fawzy/Anubis@v1
+  with:
+    anubis-llm-api-key: ${{ secrets.ANUBIS_LLM_API_KEY }}
+    llm-base-url: https://api.deepseek.com   # any OpenAI-compatible endpoint
+    model: deepseek-chat
+```
+
+| Provider | `llm-base-url` |
+| --- | --- |
+| OpenCode Zen *(default)* | `https://opencode.ai/zen/v1` |
+| OpenAI | `https://api.openai.com/v1` |
+| Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` |
+| Mistral | `https://api.mistral.ai/v1` |
+| DeepSeek | `https://api.deepseek.com` |
+| xAI (Grok) | `https://api.x.ai/v1` |
+| OpenRouter | `https://openrouter.ai/api/v1` |
+| Groq | `https://api.groq.com/openai/v1` |
+| Together AI | `https://api.together.ai/v1` |
+| Fireworks AI | `https://api.fireworks.ai/inference/v1` |
+| Cerebras | `https://api.cerebras.ai/v1` |
+| SambaNova | `https://api.sambanova.ai/v1` |
+| DeepInfra | `https://api.deepinfra.com/v1/openai` |
+| Hugging Face | `https://router.huggingface.co/v1` |
+| Perplexity | `https://api.perplexity.ai` |
+| Scaleway | `https://api.scaleway.ai/v1` |
+| Ollama *(local)* | `http://localhost:11434/v1` |
+| vLLM, LM Studio, llama.cpp, LiteLLM, LocalAI | see [Providers](docs/providers.md#self-hosted-and-local) |
+
+[docs/providers.md](docs/providers.md) has the full list, the self-hosted servers,
+what is **not** compatible and why, and the one gotcha that affects every
+provider.
 
 ## Common changes
 
@@ -65,7 +103,7 @@ Every input, flag and environment variable is in
 | Page | Covers |
 | --- | --- |
 | [Configuration](docs/configuration.md) | Every input, flag and env var. |
-| [Providers](docs/providers.md) | Which models work, cost, where your diff goes. |
+| [Providers](docs/providers.md) | Which providers work, and how to configure each. |
 | [Behavior](docs/behavior.md) | Truncation, partial failure, logging, concurrency. |
 | [Development](docs/development.md) | Building, testing, code layout. |
 

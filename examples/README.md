@@ -21,12 +21,12 @@ jobs:
     steps:
       - uses: Shenouda-Fawzy/Anubis@v1
         with:
-          opencode-api-key: ${{ secrets.OPENCODE_API_KEY }}
+          anubis-llm-api-key: ${{ secrets.ANUBIS_LLM_API_KEY }}
 ```
 
 1. Copy this into `.github/workflows/anubis.yml`.
-2. Add an `OPENCODE_API_KEY` repository secret, or any OpenAI-compatible or
-   Gemini key.
+2. Add an `ANUBIS_LLM_API_KEY` repository secret. Any OpenAI-compatible provider
+   key works — see [Providers](../docs/providers.md) for the full list.
 3. Open a pull request.
 
 ## `review.sh` — local CLI
@@ -44,7 +44,7 @@ Requires `GITHUB_TOKEN` and a model key in the environment:
 
 ```sh
 export GITHUB_TOKEN=...
-export OPENCODE_API_KEY=...
+export ANUBIS_LLM_API_KEY=...
 
 # Or point it at a local model:
 MODEL=qwen3-coder LLM_BASE_URL=http://localhost:11434/v1 ./examples/review.sh owner/project 42
