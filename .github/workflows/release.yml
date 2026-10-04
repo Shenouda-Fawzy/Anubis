@@ -25,9 +25,14 @@ jobs:
           fetch-depth: 0
 
       # A tag that is not on main is a release nobody tested in CI, because CI
-      # only runs on pushes to main and on pull requests.
+      # only runs on pushes to main and on pull requests. The fetch is explicit
+      # because this gate must not depend on what checkout happens to leave
+      # behind: a missing origin/main fails the release at its first step.
       - name: Require the tag to be on main
-        run: git merge-base --is-ancestor "$GITHUB_REF_NAME" origin/main
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$GITHUB_REF_NAME" origin/main
 
       - uses: actions/setup-go@v5
         with:
@@ -65,6 +70,15 @@ jobs:
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/* --clobber
+            exit 0
+          fi
+          # --generate-notes has nothing to compare against on the first
+          # release, so a release may carry hand-written notes in
+          # .github/release-notes/<tag>.md instead. Only the releases that need
+          # them have such a file.
+          if [ -f ".github/release-notes/$TAG.md" ]; then
+            gh release create "$TAG" --title "$TAG" \
+              --notes-file ".github/release-notes/$TAG.md" dist/*
           else
             gh release create "$TAG" --title "$TAG" --generate-notes dist/*
           fi

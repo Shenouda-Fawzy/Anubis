@@ -46,6 +46,12 @@ The workflow checks that the tag is reachable from `main`, reruns gofmt, vet,
 `go test -race` and the Docker build, publishes the release with generated
 notes and a checksummed binary, then moves the floating `v1` tag.
 
+Release notes are generated from the commit history. A release that needs
+different text drops a `.github/release-notes/<tag>.md` in the repository and
+the workflow uses it instead; only the releases that need one have such a file.
+The first release needs one, because there is no earlier tag for the generated
+notes to compare against.
+
 `v1` is what the README and `SECURITY.md` tell people to pin, so it has to
 follow every release. It only ever moves forward: re-running an older tag is a
 no-op for `v1` and just replaces that release's assets. The `v1` push does not
