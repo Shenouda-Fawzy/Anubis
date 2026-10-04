@@ -40,7 +40,7 @@ body:
       label: What happened instead?
       description: |
         The error message or the comment Anubis posted. Please set
-        `log-level: debug` — the log never contains diff or prompt content.
+        `anubis-log-level: debug` — the log never contains diff or prompt content.
     validations:
       required: true
 
@@ -59,7 +59,7 @@ body:
     attributes:
       label: Provider, model and base URL
       description: |
-        Which provider and model, and the `llm-base-url` you set. A non-default
+        Which provider and model, and the `anubis-llm-base-url` you set. A non-default
         endpoint is the usual cause of a failure.
       placeholder: big-pickle at https://opencode.ai/zen/v1
     validations:

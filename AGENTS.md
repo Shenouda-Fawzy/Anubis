@@ -51,11 +51,21 @@ a PR comment.
   provider-named variable ever supplies a key again. If you rename the variable,
   change `cli.go`, `action.yml`, `docs/configuration.md`, the help text and
   `TestLLMAPIKeyReadsDocumentedVariable` together.
-- **Every variable Anubis owns is prefixed `ANUBIS_`.** Nothing in the codebase may
+- **Every variable and input Anubis owns is prefixed: `ANUBIS_` in the
+  environment, `anubis-` in `action.yml`.** The five Anubis-owned inputs are
+  `anubis-llm-api-key`, `anubis-llm-base-url`, `anubis-llm-model`,
+  `anubis-log-level` and `anubis-max-concurrency`. Nothing in the codebase may
   name a model provider in a variable, flag or input: one protocol, many
   providers, and the credential is the provider's key whoever serves it. The
-  `GITHUB_*` names are the deliberate exception — they are GitHub's own contract,
-  set by the runner and read by convention across the ecosystem.
+  GitHub-side names — the `GITHUB_*` variables and the `github-token`, `repo`,
+  `pr`, `publish` and `github-base-url` inputs — are the deliberate exception.
+  They are GitHub's own contract, set by the runner and read by convention across
+  the ecosystem. CLI *flags* (`-model`, `-llm-base-url`) are a third naming
+  space: they are the binary's own interface and are not prefixed. Keep the
+  input names, the `ANUBIS_*` variables they map to, the table in
+  `docs/configuration.md` and every documented workflow in step with
+  `action.yml`. Every input maps to the variable of the same name: no
+  exceptions.
 - **Provider support is a documentation claim, not a code path.** Anubis has no
   per-provider logic; `docs/providers.md` lists base URLs that were checked against
   each vendor's documentation. Those URLs go stale — GitHub Models was retired in
@@ -113,5 +123,7 @@ a PR comment.
 - `cli.go`'s env defaults (`GITHUB_REPOSITORY`, `GITHUB_API_URL`, `GITHUB_TOKEN`,
   `ANUBIS_*`) are what the container action relies on; `action.yml` passes
   `-pr`, `-publish` and `-log-level` as args.
-- `examples/` holds consumer-facing copy-paste templates. `review.sh` must stay
-  executable.
+- `examples/anubis.yml` is the one consumer-facing template: the complete
+  action configuration, every input written out. There is deliberately no local
+  CLI script — the main README covers both the action and the CLI, and a second
+  copy of either is a copy that drifts.

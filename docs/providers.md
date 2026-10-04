@@ -10,7 +10,8 @@ no Anubis-specific integration, adapter or SDK per provider.
 
 ## Supported providers
 
-Set `llm-base-url` to the base URL and `anubis-llm-api-key` to that provider's key.
+Set `anubis-llm-base-url` to the base URL and `anubis-llm-api-key` to that
+provider's key.
 Nothing else changes.
 
 Every row below was checked against that provider's own documentation rather than
@@ -19,7 +20,7 @@ assumed from the "OpenAI-compatible" label. Where a provider's documentation did
 
 ### Hosted APIs
 
-| Provider | `llm-base-url` | Notes |
+| Provider | `anubis-llm-base-url` | Notes |
 | --- | --- | --- |
 | **OpenCode Zen** (default) | `https://opencode.ai/zen/v1` | Free `big-pickle`. See [model routing](#opencode-zen-model-routing) before changing `model`. |
 | **OpenAI** | `https://api.openai.com/v1` | The reference implementation. |
@@ -41,7 +42,7 @@ assumed from the "OpenAI-compatible" label. Where a provider's documentation did
 
 ### Self-hosted and local
 
-| Server | `llm-base-url` | Key |
+| Server | `anubis-llm-base-url` | Key |
 | --- | --- | --- |
 | **Ollama** | `http://localhost:11434/v1` | Ignored, but **must be non-empty** — see below. |
 | **LM Studio** | `http://localhost:1234/v1` | Ignored unless you enable auth in the server. |
@@ -59,8 +60,8 @@ placeholder:
 ```yaml
 with:
   anubis-llm-api-key: ollama
-  llm-base-url: http://localhost:11434/v1
-  model: qwen3-coder
+  anubis-llm-base-url: http://localhost:11434/v1
+  anubis-llm-model: qwen3-coder
 ```
 
 Most of these servers document the endpoint and the auth header, but only some
@@ -141,7 +142,7 @@ exactly the kind of prompt that trips one.
 
 ## Building the URL
 
-`llm-base-url` is used as-is unless it already ends in `/chat/completions`, in
+`anubis-llm-base-url` is used as-is unless it already ends in `/chat/completions`,
 which case nothing is appended. All of these are equivalent:
 
 ```text
@@ -192,7 +193,7 @@ model*. `big-pickle` is a free "stealth" model, so out of the box your diffs can
 be used for model improvement. Do not point the default at a repository with
 code you would not publish.
 
-To keep the diff inside your own infrastructure, set `llm-base-url` to a
+To keep the diff inside your own infrastructure, set `anubis-llm-base-url` to a
 self-hosted OpenAI-compatible endpoint such as Ollama or vLLM, and verify that
 provider's terms yourself. Anubis makes no claims about any provider's data
 handling beyond what that provider publishes.

@@ -54,7 +54,7 @@ func Review() {
 	flag.StringVar(&logLevel, "log-level", envOr("ANUBIS_LOG_LEVEL", "info"), "log level: debug, info, warn, error")
 	flag.StringVar(&repo, "repo", os.Getenv("GITHUB_REPOSITORY"), "repository in 'owner/name' form")
 	flag.Var(optionalInt{&pullReqNum}, "pr", "pull request number")
-	flag.StringVar(&model, "model", envOr("ANUBIS_MODEL", defaultModel), "chat model")
+	flag.StringVar(&model, "model", envOr("ANUBIS_LLM_MODEL", defaultModel), "chat model")
 	flag.StringVar(&baseURL, "llm-base-url", envOr("ANUBIS_LLM_BASE_URL", defaultLLMBaseURL), "OpenAI-compatible API base URL")
 	flag.StringVar(&githubBaseURL, "github-base-url", envOr("GITHUB_API_URL", defaultGitHubBaseURL), "GitHub API base URL")
 	flag.StringVar(&githubToken, "github-token", os.Getenv("GITHUB_TOKEN"), "GitHub token")
@@ -195,7 +195,7 @@ Flags:
   -pr int
         pull request number (required)
   -model string
-        chat model (env ANUBIS_MODEL, default "` + defaultModel + `")
+        chat model (env ANUBIS_LLM_MODEL, default "` + defaultModel + `")
   -llm-base-url string
         OpenAI-compatible API base URL (env ANUBIS_LLM_BASE_URL, default
         "` + defaultLLMBaseURL + `")
@@ -215,7 +215,7 @@ Environment:
   ANUBIS_LLM_API_KEY
         API key for the model endpoint. Any OpenAI-compatible provider works;
         see docs/providers.md for the base URL of each supported one.
-  ANUBIS_LLM_BASE_URL, ANUBIS_MODEL
+  ANUBIS_LLM_BASE_URL, ANUBIS_LLM_MODEL
         base URL and model of that endpoint
   ANUBIS_MAX_CONCURRENCY
         how many specialist reviewers may run at once (default ` + strconv.Itoa(defaultMaxConcurrency) + `, which runs them one after another). Raise it to trade rate-limit headroom for wall-clock time.

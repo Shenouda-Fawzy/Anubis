@@ -10,8 +10,9 @@
 # Actions, both at repository scope:
 #
 #   ANUBIS_LLM_API_KEY   the model provider's key. Anubis speaks one protocol,
-#                        so this is whichever provider you point llm-base-url
-#                        at — see docs/providers.md for each one's base URL.
+#                        so this is whichever provider you point
+#                        anubis-llm-base-url at — see docs/providers.md for
+#                        each one's base URL.
 #   GITHUB_TOKEN         GitHub creates this for you; do not add it by hand.
 #
 # GITHUB_TOKEN is passed explicitly rather than left to the action's default so
@@ -60,11 +61,11 @@ jobs:
           # DeepSeek is used here because it is cheap and needs no account
           # approval. Note the base URL has no /v1 suffix — copy each provider's
           # exactly as docs/providers.md lists it.
-          llm-base-url: https://api.deepseek.com
-          model: deepseek-chat
+          anubis-llm-base-url: https://api.deepseek.com
+          anubis-llm-model: deepseek-chat
 
           # Control whether sub-agents runs concurrently, max=4.
-          max-concurrency: '1'
+          anubis-max-concurrency: '1'
 
           # allowed options [info, debug, warning, error]
-          log-level: info
+          anubis-log-level: info

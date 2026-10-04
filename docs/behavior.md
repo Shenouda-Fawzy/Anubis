@@ -14,7 +14,7 @@ worth it:
 ```yaml
       - uses: Shenouda-Fawzy/Anubis@v1
         with:
-          max-concurrency: '4'
+          anubis-max-concurrency: '4'
 ```
 
 ```sh

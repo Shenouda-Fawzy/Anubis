@@ -74,11 +74,11 @@ provider is a URL and a key. No adapter, no code change:
 - uses: Shenouda-Fawzy/Anubis@v1
   with:
     anubis-llm-api-key: ${{ secrets.ANUBIS_LLM_API_KEY }}
-    llm-base-url: https://api.deepseek.com   # any OpenAI-compatible endpoint
-    model: deepseek-chat
+    anubis-llm-base-url: https://api.deepseek.com   # any OpenAI-compatible endpoint
+    anubis-llm-model: deepseek-chat
 ```
 
-| Provider | `llm-base-url` |
+| Provider | `anubis-llm-base-url` |
 | --- | --- |
 | OpenCode Zen *(default)* | `https://opencode.ai/zen/v1` |
 | OpenAI | `https://api.openai.com/v1` |
@@ -107,10 +107,10 @@ provider.
 
 | To do this | Set this |
 | --- | --- |
-| Use another model or provider | `model`, `llm-base-url` |
-| Run the reviewers in parallel | `max-concurrency` |
+| Use another model or provider | `anubis-llm-model`, `anubis-llm-base-url` |
+| Run the reviewers in parallel | `anubis-max-concurrency` |
 | Keep the review out of the PR | `publish: false` |
-| See more detail in the log | `log-level: debug` |
+| See more detail in the log | `anubis-log-level: debug` |
 
 Every input, flag and environment variable is in
 [docs/configuration.md](docs/configuration.md).

@@ -27,11 +27,11 @@ inputs:
     description: 'Post the review as a pull-request comment.'
     required: false
     default: 'true'
-  model:
+  anubis-llm-model:
     description: 'Chat model identifier passed to the OpenAI-compatible endpoint.'
     required: false
     default: 'big-pickle'
-  llm-base-url:
+  anubis-llm-base-url:
     description: 'OpenAI-compatible /chat/completions base URL.'
     required: false
     default: 'https://opencode.ai/zen/v1'
@@ -43,11 +43,11 @@ inputs:
     description: 'Bearer token for the model endpoint. Works with any OpenAI-compatible provider; see docs/providers.md for the base URL of each one.'
     required: false
     default: ''
-  log-level:
+  anubis-log-level:
     description: 'Log verbosity: debug, info, warn or error. Note that debug still never logs diff content.'
     required: false
     default: 'info'
-  max-concurrency:
+  anubis-max-concurrency:
     description: 'How many specialist reviewers may run at once. The default of 1 runs them one after another, which is the gentlest option for a provider rate limit. Raise it to reduce wall-clock time at the cost of parallel requests.'
     required: false
     default: '1'
@@ -55,19 +55,20 @@ inputs:
 runs:
   using: 'docker'
   image: 'Dockerfile'
-  # Two conventions hold this block together. Every variable Anubis owns is
-  # prefixed ANUBIS_, so nothing here can collide with a caller's environment
-  # and the provider is never named: one client, many providers. The GITHUB_*
-  # names are GitHub's own contract, set by the runner and read by convention
-  # across the ecosystem, so they are deliberately not prefixed.
+  # Two conventions hold this block together. Every input and variable Anubis owns
+  # is prefixed anubis-/ANUBIS_, so nothing here can collide with a caller's
+  # environment and the provider is never named: one client, many providers. The
+  # GitHub-side names (github-token, repo, pr, publish, github-base-url) and the
+  # GITHUB_* variables are GitHub's own contract, set by the runner and read by
+  # convention across the ecosystem, so they are deliberately not prefixed.
   env:
     GITHUB_TOKEN: ${{ inputs.github-token }}
     GITHUB_REPOSITORY: ${{ inputs.repo || github.repository }}
     GITHUB_API_URL: ${{ inputs.github-base-url || github.api_url }}
-    ANUBIS_MODEL: ${{ inputs.model }}
-    ANUBIS_LLM_BASE_URL: ${{ inputs.llm-base-url }}
-    ANUBIS_LOG_LEVEL: ${{ inputs.log-level }}
-    ANUBIS_MAX_CONCURRENCY: ${{ inputs.max-concurrency }}
+    ANUBIS_LLM_MODEL: ${{ inputs.anubis-llm-model }}
+    ANUBIS_LLM_BASE_URL: ${{ inputs.anubis-llm-base-url }}
+    ANUBIS_LOG_LEVEL: ${{ inputs.anubis-log-level }}
+    ANUBIS_MAX_CONCURRENCY: ${{ inputs.anubis-max-concurrency }}
     ANUBIS_LLM_API_KEY: ${{ inputs.anubis-llm-api-key }}
   args:
     # -pr and -publish have no environment fallback; everything else is passed
