@@ -1,5 +1,7 @@
 name: 'Anubis PR review'
-description: 'Specialist AI reviewers analyze a pull-request diff one at a time, then a coordinator model deduplicates their findings into one high-signal review comment.'
+# The GitHub Marketplace caps this at 125 characters for a Docker action and
+# refuses the listing otherwise. Keep it short; the README carries the detail.
+description: 'Panel of AI reviewers for pull requests: specialists review the diff, a coordinator dedupes findings.'
 author: 'Shenouda Fawzy'
 
 branding:
