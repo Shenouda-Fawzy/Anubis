@@ -18,7 +18,7 @@ inputs:
   repo:
     description: 'Repository in owner/name form. Leave empty to use the repository running the workflow.'
     required: false
-    default: ''
+    default: ${{ github.repository }}
   pr:
     description: 'Pull request number to review. Defaults to the pull request that triggered the workflow.'
     required: false
@@ -42,7 +42,7 @@ inputs:
   anubis-llm-api-key:
     description: 'Bearer token for the model endpoint. Works with any OpenAI-compatible provider; see docs/providers.md for the base URL of each one.'
     required: false
-    default: ''
+    default: ${{ github.api_url }}
   anubis-log-level:
     description: 'Log verbosity: debug, info, warn or error. Note that debug still never logs diff content.'
     required: false
@@ -63,8 +63,8 @@ runs:
   # convention across the ecosystem, so they are deliberately not prefixed.
   env:
     GITHUB_TOKEN: ${{ inputs.github-token }}
-    GITHUB_REPOSITORY: ${{ inputs.repo || github.repository }}
-    GITHUB_API_URL: ${{ inputs.github-base-url || github.api_url }}
+    GITHUB_REPOSITORY: ${{ inputs.repo }}
+    GITHUB_API_URL: ${{ inputs.github-base-url }}
     ANUBIS_LLM_MODEL: ${{ inputs.anubis-llm-model }}
     ANUBIS_LLM_BASE_URL: ${{ inputs.anubis-llm-base-url }}
     ANUBIS_LOG_LEVEL: ${{ inputs.anubis-log-level }}
