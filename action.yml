@@ -38,11 +38,11 @@ inputs:
   github-base-url:
     description: 'GitHub API base URL. Leave empty to auto-detect, which is correct for both github.com and GitHub Enterprise. Override only if auto-detection is wrong.'
     required: false
-    default: ''
+    default: ${{ github.api_url }}
   anubis-llm-api-key:
     description: 'Bearer token for the model endpoint. Works with any OpenAI-compatible provider; see docs/providers.md for the base URL of each one.'
     required: false
-    default: ${{ github.api_url }}
+    default: ''
   anubis-log-level:
     description: 'Log verbosity: debug, info, warn or error. Note that debug still never logs diff content.'
     required: false
