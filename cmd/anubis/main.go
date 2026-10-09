@@ -55,6 +55,22 @@ func envOr(name, fallback string) string {
 	return fallback
 }
 
+// envBool parses a boolean environment variable. An unset value returns
+// fallback; an unparseable one returns fallback with a warning, because a typo
+// in a switch should not silently flip behavior.
+func envBool(name string, fallback bool) bool {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback
+	}
+	v, err := strconv.ParseBool(raw)
+	if err != nil {
+		slog.Warn("ignoring invalid boolean environment variable", "name", name, "value", raw)
+		return fallback
+	}
+	return v
+}
+
 // maxConcurrency resolves how many specialist reviewers may run at once from
 // ANUBIS_MAX_CONCURRENCY. An unset, unparseable or non-positive value falls back
 // to the sequential default rather than failing the run, because a typo in a

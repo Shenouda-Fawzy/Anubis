@@ -51,6 +51,10 @@ inputs:
     description: 'How many specialist reviewers may run at once. The default of 1 runs them one after another, which is the gentlest option for a provider rate limit. Raise it to reduce wall-clock time at the cost of parallel requests.'
     required: false
     default: '1'
+  anubis-agents:
+    description: 'Load review agents from .anubis-agents/ at the repository root on the default branch. When the directory has at least one valid *.md file it replaces the built-in specialists; a master-agent.md there overrides the coordinator. Never read from the pull-request head.'
+    required: false
+    default: 'false'
 
 runs:
   using: 'docker'
@@ -69,6 +73,7 @@ runs:
     ANUBIS_LLM_BASE_URL: ${{ inputs.anubis-llm-base-url }}
     ANUBIS_LOG_LEVEL: ${{ inputs.anubis-log-level }}
     ANUBIS_MAX_CONCURRENCY: ${{ inputs.anubis-max-concurrency }}
+    ANUBIS_AGENTS: ${{ inputs.anubis-agents }}
     ANUBIS_LLM_API_KEY: ${{ inputs.anubis-llm-api-key }}
   args:
     # -pr and -publish have no environment fallback; everything else is passed

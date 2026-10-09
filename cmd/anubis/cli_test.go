@@ -113,16 +113,12 @@ func TestLongHelpMatchesDocumentedFlags(t *testing.T) {
 	help := longHelp()
 	for _, want := range []string{
 		"-repo", "-pr", "-model", "-llm-base-url", "-github-base-url", "-github-token",
-		"-publish", "-log-level", "ANUBIS_LLM_API_KEY", defaultModel, defaultLLMBaseURL,
+		"-publish", "-log-level", "-agents", "ANUBIS_LLM_API_KEY", "ANUBIS_AGENTS",
+		defaultModel, defaultLLMBaseURL,
 	} {
 		if !strings.Contains(help, want) {
 			t.Errorf("help text is missing %q", want)
 		}
-	}
-	// The Markdown-agents feature was removed from the initial release; the help
-	// text must not keep advertising it.
-	if strings.Contains(help, "-agents") {
-		t.Error("help text still advertises the removed -agents flag")
 	}
 }
 

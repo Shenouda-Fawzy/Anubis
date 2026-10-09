@@ -15,7 +15,7 @@ Guidance for coding agents working in this repository.
 - Vet: `make vet`. Lint: `make lint` (golangci-lint; see `.golangci.yml`).
 - CI (`.github/workflows/ci.yml`) runs `gofmt -l cmd`, `go vet`, `go test -race`,
   `golangci-lint` and `docker build`. Keep all five green.
-- The only third-party dependency is `github.com/google/go-github/v90`. Prefer the
+- The only third-party dependency is `github.com/google/go-github/v92`. Prefer the
   standard library; do not add dependencies without a reason worth stating in
   the PR.
 
@@ -32,6 +32,7 @@ Everything lives in `package main` under `cmd/anubis`. There is no `pkg/` tree.
 | `completion.go` | Request/response wire types shared by agents and the coordinator |
 | `subagent_new.go` | `Agent`, the `ChatCompleter` interface, per-agent review |
 | `subagentprompt.go` | Generic specialist system prompt (fallback) and the per-agent task renderer |
+| `agents.go` | Optional `.anubis-agents` loader: front-matter parser, trusted-ref fetch, custom specialist/coordinator selection |
 | `coordinator.go` | Concurrent agent fan-out, synthesis call, result state |
 | `prompts.go` | `go:embed` of `specialist/*.md`, the specialist and coordinator system prompts |
 | `specialist/*.md` | The review prompts themselves, one file per agent plus the coordinator |
@@ -53,9 +54,10 @@ a PR comment.
   change `cli.go`, `action.yml`, `docs/configuration.md`, the help text and
   `TestLLMAPIKeyReadsDocumentedVariable` together.
 - **Every variable and input Anubis owns is prefixed: `ANUBIS_` in the
-  environment, `anubis-` in `action.yml`.** The five Anubis-owned inputs are
+  environment, `anubis-` in `action.yml`.** The six Anubis-owned inputs are
   `anubis-llm-api-key`, `anubis-llm-base-url`, `anubis-llm-model`,
-  `anubis-log-level` and `anubis-max-concurrency`. Nothing in the codebase may
+  `anubis-log-level`, `anubis-max-concurrency` and `anubis-agents`. Nothing in
+  the codebase may
   name a model provider in a variable, flag or input: one protocol, many
   providers, and the credential is the provider's key whoever serves it. The
   GitHub-side names — the `GITHUB_*` variables and the `github-token`, `repo`,
@@ -111,11 +113,23 @@ a PR comment.
 - **Logs go to stderr** via `log/slog` as structured text. ANSI color only for a
   TTY unless forced with `ANUBIS_LOG_COLOR=always`; `NO_COLOR` disables it.
 - **The built-in prompts are Markdown embedded at build time.** `prompts.go`
-  embeds `specialist/*.md` via `go:embed`; one file per specialist plus
-  `master-agent.md` for the coordinator. There is still no runtime Markdown
-  loader, no `-agents` flag and no front-matter parsing: `go:embed` cannot reach
-  outside the package directory, so the files must stay under `cmd/anubis/`.
-  Editing a prompt changes every review for every user.
+  embeds `cmd/anubis/specialist/*.md` via `go:embed`; one file per specialist plus
+  `master-agent.md` for the coordinator. `go:embed` cannot reach outside the
+  package directory, so the files must stay under `cmd/anubis/`. Editing a prompt
+  changes every review for every user.
+- **Custom agents are read at run time from `.anubis-agents/` on the default
+  branch, and only the default branch.** `anubis-agents` (default `false`) turns
+  it on; `agents.go` lists and fetches the directory over the Contents API, so
+  there is no checkout and the container stays off the workspace. A directory
+  with at least one valid `*.md` **replaces** the built-in specialists; a file
+  named exactly `master-agent.md` overrides the coordinator and is never a
+  specialist. The body is the agent's system prompt (front-matter is stripped);
+  `name` defaults to the filename, `description` to a generic focus, `model` to
+  `ANUBIS_LLM_MODEL`. Bounds: 8 files, 64 KiB each. Every failure falls back to
+  the built-ins with a warning, and the published comment discloses when custom
+  specialists or a custom coordinator were used. Reading from the PR head would
+  let a contributor rewrite the instructions that review their own change — do
+  not do it.
 - `go.mod` requires the 1.26.x toolchain.
 
 ## GitHub Action packaging
