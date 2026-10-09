@@ -15,7 +15,7 @@ const (
 )
 
 const (
-	maxAgentFiles     = 8
+	maxAgentFiles     = 16
 	maxAgentFileBytes = 64 * 1024
 )
 
@@ -52,7 +52,7 @@ func loadAgentGroup(ctx context.Context, gh *Client, owner, repo, branchName, de
 	if err != nil {
 		if isGitHubNotFound(err) {
 			slog.Debug("no custom agents directory", "path", agentsDir, "ref", branchName)
-			return nil, nil
+			return &agentGroup{Ref: branchName}, nil
 		}
 		return nil, fmt.Errorf("list %s: %w", agentsDir, err)
 	}

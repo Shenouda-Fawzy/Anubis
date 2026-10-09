@@ -101,12 +101,9 @@ func (c *Coordinator) DiffTruncated() bool {
 // errNoFindings marks an agent that completed without producing any output.
 var errNoFindings = errors.New("the model returned an empty review")
 
-// maxConcurrentAgents bounds how many specialist reviewers run at once, so a
-// large agent set cannot fan out into an unbounded number of in-flight
-// provider requests. It is the ceiling used when the caller does not set
-// MaxConcurrency explicitly; see defaultMaxConcurrency for why the shipped
-// default is 1.
-const maxConcurrentAgents = 4
+// maxConcurrentAgents upper limit of number of concurrent sub-agents
+// set it via ANUBIS_MAX_CONCURRENCY
+const maxConcurrentAgents = 16
 
 // Review runs every specialist agent against the pull request, then asks the
 // coordinator model to validate, deduplicate and synthesize their findings.

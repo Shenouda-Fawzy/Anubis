@@ -170,15 +170,16 @@ func TestCoordinatorRespectsPartialConcurrency(t *testing.T) {
 
 // An absurd value must not fan out without bound.
 func TestCoordinatorClampsConcurrencyToTheHardCeiling(t *testing.T) {
-	c, llm := newConcurrencyHarness(t, 6, 1000)
+	agents := maxConcurrentAgents + 4
+	c, llm := newConcurrencyHarness(t, agents, 1000)
 	if err := c.Review(context.Background()); err != nil {
 		t.Fatalf("Review() error = %v", err)
 	}
 	if got := llm.peakConcurrency(); got > maxConcurrentAgents {
 		t.Errorf("peak in-flight agent calls = %d, want at most %d", got, maxConcurrentAgents)
 	}
-	if got := llm.agentCount(); got != 6 {
-		t.Errorf("agent completions = %d, want 6", got)
+	if got := llm.agentCount(); got != agents {
+		t.Errorf("agent completions = %d, want %d", got, agents)
 	}
 }
 

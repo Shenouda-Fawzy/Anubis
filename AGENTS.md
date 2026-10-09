@@ -40,7 +40,7 @@ Everything lives in `package main` under `cmd/anubis`. There is no `pkg/` tree.
 | `log_color.go` | Optional ANSI coloring of the slog text output |
 
 Flow: load PR and diff → run all agents (concurrency from `ANUBIS_MAX_CONCURRENCY`,
-default 1, hard ceiling 4) → synthesize with the coordinator → optionally post as
+default 1, hard ceiling 16) → synthesize with the coordinator → optionally post as
 a PR comment.
 
 ## Non-obvious behavior
@@ -89,7 +89,7 @@ a PR comment.
   goroutine writes only its own `Agent.Finding`; run `go test -race` if you touch
   this. The default is **sequential** (`defaultMaxConcurrency = 1`) to avoid
   rate limits; `Coordinator.MaxConcurrency` raises it, and the `concurrency()`
-  helper clamps it to the agent count and to `maxConcurrentAgents` (4).
+  helper clamps it to the agent count and to `maxConcurrentAgents` (16).
 - **Partial failure is tolerated, total failure is not.** One failed agent still
   produces a review, and the comment discloses how many agents failed. If no
   agent produced a finding, `Review` returns an error and the comment becomes a
@@ -125,7 +125,7 @@ a PR comment.
   named exactly `master-agent.md` overrides the coordinator and is never a
   specialist. The body is the agent's system prompt (front-matter is stripped);
   `name` defaults to the filename, `description` to a generic focus, `model` to
-  `ANUBIS_LLM_MODEL`. Bounds: 8 files, 64 KiB each. Every failure falls back to
+  `ANUBIS_LLM_MODEL`. Bounds: 16 files, 64 KiB each. Every failure falls back to
   the built-ins with a warning, and the published comment discloses when custom
   specialists or a custom coordinator were used. Reading from the PR head would
   let a contributor rewrite the instructions that review their own change — do

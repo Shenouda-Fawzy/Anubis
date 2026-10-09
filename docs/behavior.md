@@ -23,7 +23,7 @@ ANUBIS_MAX_CONCURRENCY=4 ./anubis -repo owner/repo -pr 42
 
 Rules:
 
-- The value is clamped to the number of agents and to a hard ceiling of 4, so a
+- The value is clamped to the number of agents and to a hard ceiling of 16, so a
   large setting cannot produce unbounded parallel requests.
 - An unset, unparseable or non-positive value is treated as `1` and logged as a
   warning. A typo in a tuning variable should not stop a review.
@@ -112,7 +112,7 @@ describe, that public APIs are documented, and that examples still work.
   override is explicit by filename. Any other name (including `Master-Agent.md`)
   is an ordinary specialist.
 
-Limits: at most 8 files, 64 KiB each. An over-limit or unparseable file is skipped
+Limits: at most 16 files, 64 KiB each. An over-limit or unparseable file is skipped
 with a warning. If the directory is missing or the API call fails, Anubis falls
 back to the built-ins and the published comment says so. Every run that uses
 custom agents or a custom coordinator **discloses it in the comment**, so a
