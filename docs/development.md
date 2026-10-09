@@ -71,8 +71,9 @@ Everything lives in `package main` under `cmd/anubis`. There is no `pkg/` tree.
 | `completion.go` | Request and response wire types |
 | `coordinator.go` | Agent fan-out, synthesis call, result state |
 | `subagent_new.go` | `Agent`, the `ChatCompleter` interface, per-agent review |
-| `subagentprompt.go` | Specialist system prompt and per-agent task renderer |
-| `masterprompt.go` | Coordinator system prompt |
+| `subagentprompt.go` | Generic specialist system prompt (fallback) and per-agent task renderer |
+| `prompts.go` | `go:embed` of the specialist and coordinator prompts |
+| `specialist/*.md` | The review prompts, one file per agent plus the coordinator |
 | `reviewprompt.go` | Coordinator user-message template |
 | `log_color.go` | Optional ANSI coloring of the slog text output |
 

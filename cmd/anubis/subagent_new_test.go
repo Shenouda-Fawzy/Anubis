@@ -101,6 +101,27 @@ func TestAgentReviewSuccess(t *testing.T) {
 	}
 }
 
+// An agent with its own prompt must send that prompt as the system message
+// rather than the generic specialist fallback. This is how the embedded
+// Markdown specialists reach the model.
+func TestAgentReviewUsesAgentSystemPrompt(t *testing.T) {
+	const agentPrompt = "# Security Agent\n\nYou are a senior application-security engineer."
+	llm := &fakeCompleter{result: &CompletionResponse{Content: "ok", FinishReason: "stop"}}
+	agent := testAgent(llm)
+	agent.SystemPrompt = agentPrompt
+
+	if err := agent.Review(context.Background(), testPR()); err != nil {
+		t.Fatalf("Review() error = %v", err)
+	}
+	system := llm.request().Messages[0].Content
+	if system != agentPrompt {
+		t.Errorf("system message = %q, want the agent's own prompt", system)
+	}
+	if system == subAgentPrompt {
+		t.Error("agent with a system prompt fell back to the generic specialist prompt")
+	}
+}
+
 // The specialist must actually see the change it is reviewing.
 func TestAgentReviewSendsDiffAndPRContext(t *testing.T) {
 	llm := &fakeCompleter{result: &CompletionResponse{Content: "ok", FinishReason: "stop"}}

@@ -61,9 +61,9 @@ Zero configuration. It defaults to OpenCode Zen's free `big-pickle` model.
 ## What it does
 
 Four specialists — `security`, `correctness`, `performance` and
-`maintainability` — review the diff one at a time, each with a different focus. A
-coordinator then discards false positives, deduplicates by root cause, and
-re-grades severity. The result is posted as a comment.
+`maintainability` — review the diff one at a time, each with its own review
+prompt and focus. A coordinator then discards false positives, deduplicates by
+root cause, and re-grades severity. The result is posted as a comment.
 
 ## Providers
 

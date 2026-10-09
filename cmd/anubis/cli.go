@@ -231,21 +231,28 @@ Examples:
 
 // defaultAgents returns the built-in specialist reviewers. Every agent reviews
 // the whole diff through its own lens; the coordinator then validates and merges
-// their findings.
+// their findings. Each agent's system prompt is the embedded specialist prompt
+// authored under cmd/anubis/specialist, so the review guidance lives as
+// reviewable Markdown rather than Go string literals.
 func defaultAgents(llmClient *OpenAIClient) []*Agent {
-	descriptions := []struct{ name, description string }{
-		{"security", "Look for authentication, authorization, injection, data exposure, and secret-handling issues."},
-		{"correctness", "Look for concrete bugs, incorrect edge cases, and behavioral regressions introduced by this change."},
-		{"performance", "Look for avoidable latency, excessive resource use, inefficient algorithms, and scalability problems."},
-		{"maintainability", "Look for maintainability, readability, testing, error-handling, and established best-practice problems."},
+	specs := []struct {
+		name         string
+		description  string
+		systemPrompt string
+	}{
+		{"security", "Look for authentication, authorization, injection, data exposure, and secret-handling issues.", securityAgentPrompt},
+		{"correctness", "Look for concrete bugs, incorrect edge cases, and behavioral regressions introduced by this change.", correctnessAgentPrompt},
+		{"performance", "Look for avoidable latency, excessive resource use, inefficient algorithms, and scalability problems.", performanceAgentPrompt},
+		{"maintainability", "Look for maintainability, readability, testing, error-handling, and established best-practice problems.", maintainabilityAgentPrompt},
 	}
-	agents := make([]*Agent, 0, len(descriptions))
-	for _, d := range descriptions {
+	agents := make([]*Agent, 0, len(specs))
+	for _, s := range specs {
 		agents = append(agents, &Agent{
 			AgentCard: &AgentCard{
-				Name:        d.name,
-				Description: d.description,
-				Model:       llmClient.Model,
+				Name:         s.name,
+				Description:  s.description,
+				Model:        llmClient.Model,
+				SystemPrompt: s.systemPrompt,
 			},
 			LlmClient: llmClient,
 		})

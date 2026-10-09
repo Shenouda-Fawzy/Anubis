@@ -133,6 +133,14 @@ func TestDefaultAgents(t *testing.T) {
 	if len(as) == 0 {
 		t.Fatal("defaultAgents() returned no agents")
 	}
+	// Each built-in agent must carry its own embedded specialist prompt, not
+	// fall back to the generic one. These are the files a maintainer edits.
+	wantPrompt := map[string]string{
+		"security":        securityAgentPrompt,
+		"correctness":     correctnessAgentPrompt,
+		"performance":     performanceAgentPrompt,
+		"maintainability": maintainabilityAgentPrompt,
+	}
 	seen := map[string]bool{}
 	for _, a := range as {
 		if a.Name == "" {
@@ -151,8 +159,22 @@ func TestDefaultAgents(t *testing.T) {
 		if a.LlmClient != llm {
 			t.Errorf("agent %q is not wired to the shared client", a.Name)
 		}
+		if a.SystemPrompt == "" {
+			t.Errorf("agent %q has no system prompt", a.Name)
+		}
+		if want, ok := wantPrompt[a.Name]; ok && a.SystemPrompt != want {
+			t.Errorf("agent %q does not use its embedded specialist prompt", a.Name)
+		}
+		if a.SystemPrompt == subAgentPrompt {
+			t.Errorf("agent %q fell back to the generic specialist prompt", a.Name)
+		}
 		if len(as) > maxConcurrentAgents {
 			t.Errorf("built-in agent count %d exceeds the concurrency limit %d", len(as), maxConcurrentAgents)
+		}
+	}
+	for name := range wantPrompt {
+		if !seen[name] {
+			t.Errorf("defaultAgents() is missing the %q specialist", name)
 		}
 	}
 }

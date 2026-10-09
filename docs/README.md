@@ -19,7 +19,7 @@ convention.
 
 1. Fetch the pull request and its diff from the GitHub REST API.
 2. Four built-in specialists — `security`, `correctness`, `performance` and
-   `maintainability` — review the diff, each with the same specialist system
+   `maintainability` — review the diff, each with its own specialist review
    prompt and a different focus. They run one at a time by default.
 3. A coordinator model receives the diff plus every specialist's findings, then
    discards false positives, deduplicates by root cause, resolves

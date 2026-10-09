@@ -31,9 +31,10 @@ Everything lives in `package main` under `cmd/anubis`. There is no `pkg/` tree.
 | `openai.go` | OpenAI-compatible `/chat/completions` client and response parsing |
 | `completion.go` | Request/response wire types shared by agents and the coordinator |
 | `subagent_new.go` | `Agent`, the `ChatCompleter` interface, per-agent review |
-| `subagentprompt.go` | Specialist system prompt and the per-agent task renderer |
+| `subagentprompt.go` | Generic specialist system prompt (fallback) and the per-agent task renderer |
 | `coordinator.go` | Concurrent agent fan-out, synthesis call, result state |
-| `masterprompt.go` | Coordinator system prompt |
+| `prompts.go` | `go:embed` of `specialist/*.md`, the specialist and coordinator system prompts |
+| `specialist/*.md` | The review prompts themselves, one file per agent plus the coordinator |
 | `reviewprompt.go` | Coordinator user-message template |
 | `log_color.go` | Optional ANSI coloring of the slog text output |
 
@@ -76,9 +77,11 @@ a PR comment.
   argument list silently shifts every value and injects `%!s(MISSING)`.
   `TestReviewPromptArgumentsAreAligned` exists to catch exactly that.
 - **Agents receive the diff; the coordinator prompt is not for them.** Each
-  specialist gets `subAgentPrompt` as its system message and a task rendered by
-  `subAgentTask` that embeds the PR context and the full diff. `Agent.Review`
-  takes a non-empty `pr.Diff` and returns an error otherwise.
+  specialist sends its own embedded system prompt (its `specialist/*.md` file)
+  and a task rendered by `subAgentTask` that embeds the PR context and the full
+  diff. An agent with no `SystemPrompt` falls back to `subAgentPrompt`, the
+  generic specialist prompt. `Agent.Review` takes a non-empty `pr.Diff` and
+  returns an error otherwise.
 - **Agents may run concurrently, but findings are folded in configured order**
   (`Coordinator.runAgents`), so the synthesis prompt is stable across runs. Each
   goroutine writes only its own `Agent.Finding`; run `go test -race` if you touch
@@ -107,9 +110,12 @@ a PR comment.
   context window rather than a cap we set.
 - **Logs go to stderr** via `log/slog` as structured text. ANSI color only for a
   TTY unless forced with `ANUBIS_LOG_COLOR=always`; `NO_COLOR` disables it.
-- **Markdown-defined agents are not part of the initial release.** There is no
-  `-agents` flag, no front-matter parsing and no `pkg/agents` loader. Do not
-  reintroduce them without a design discussion.
+- **The built-in prompts are Markdown embedded at build time.** `prompts.go`
+  embeds `specialist/*.md` via `go:embed`; one file per specialist plus
+  `master-agent.md` for the coordinator. There is still no runtime Markdown
+  loader, no `-agents` flag and no front-matter parsing: `go:embed` cannot reach
+  outside the package directory, so the files must stay under `cmd/anubis/`.
+  Editing a prompt changes every review for every user.
 - `go.mod` requires the 1.26.x toolchain.
 
 ## GitHub Action packaging
