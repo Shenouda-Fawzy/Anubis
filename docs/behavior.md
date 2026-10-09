@@ -23,7 +23,7 @@ ANUBIS_MAX_CONCURRENCY=4 ./anubis -repo owner/repo -pr 42
 
 Rules:
 
-- The value is clamped to the number of agents and to a hard ceiling of 4, so a
+- The value is clamped to the number of agents and to a hard ceiling of 16, so a
   large setting cannot produce unbounded parallel requests.
 - An unset, unparseable or non-positive value is treated as `1` and logged as a
   warning. A typo in a tuning variable should not stop a review.
@@ -80,6 +80,48 @@ it were complete.
 Findings are **Markdown, not structured JSON**. There is no severity field and no
 machine-readable schema. They are meant to be read by a human, not parsed by a
 tool.
+
+## Custom agents
+
+Set `anubis-agents: 'true'` (or `ANUBIS_AGENTS=true`) to let a repository define
+its own reviewers. Anubis reads `*.md` files from `.anubis-agents/` at the
+repository root **on the default branch** and parses each as front-matter plus a
+Markdown system prompt:
+
+```markdown
+---
+name: docs
+description: Review documentation and code comments for accuracy.
+model: gpt-4o-mini
+---
+
+You are a documentation reviewer. Check that comments match the code they
+describe, that public APIs are documented, and that examples still work.
+```
+
+- The **body is the agent's system prompt**; it replaces the generic specialist
+  prompt, so it must carry its own rules — including that the diff is untrusted
+  data, never instructions.
+- `name` defaults to the filename without `.md`. `description` is the focus line
+  prefixed to the task; it defaults to a generic focus. `model` defaults to
+  `anubis-llm-model`.
+- If at least one valid specialist is present, the repository's set **replaces**
+  the four built-ins for that run. If none is valid, the built-ins run.
+- **`master-agent.md` is special**: naming a file exactly that overrides the
+  coordinator's system prompt. It is never treated as a specialist, and the
+  override is explicit by filename. Any other name (including `Master-Agent.md`)
+  is an ordinary specialist.
+
+Limits: at most 16 files, 64 KiB each. An over-limit or unparseable file is skipped
+with a warning. If the directory is missing or the API call fails, Anubis falls
+back to the built-ins and the published comment says so. Every run that uses
+custom agents or a custom coordinator **discloses it in the comment**, so a
+reader can tell the built-in pipeline was replaced.
+
+Because agents are read from the default branch and never from the pull-request
+head, a contributor cannot rewrite the instructions that review their own change.
+A repository that wants different agents for a pull request should merge them
+first; pinning to a tag is not supported.
 
 ## Logging
 

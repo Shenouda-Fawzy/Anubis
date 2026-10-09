@@ -50,6 +50,8 @@ func Review() {
 		logLevel      string
 		// When true, comment will be added to the PR
 		publishComment bool
+		// When true, load review agents from .anubis-agents on the default branch
+		loadAgents bool
 	)
 	flag.StringVar(&logLevel, "log-level", envOr("ANUBIS_LOG_LEVEL", "info"), "log level: debug, info, warn, error")
 	flag.StringVar(&repo, "repo", os.Getenv("GITHUB_REPOSITORY"), "repository in 'owner/name' form")
@@ -59,6 +61,7 @@ func Review() {
 	flag.StringVar(&githubBaseURL, "github-base-url", envOr("GITHUB_API_URL", defaultGitHubBaseURL), "GitHub API base URL")
 	flag.StringVar(&githubToken, "github-token", os.Getenv("GITHUB_TOKEN"), "GitHub token")
 	flag.BoolVar(&publishComment, "publish", false, "publish the review as a PR comment")
+	flag.BoolVar(&loadAgents, "agents", envBool("ANUBIS_AGENTS", false), "load review agents from .anubis-agents on the default branch")
 
 	flag.Usage = func() {
 		_, _ = fmt.Fprint(flag.CommandLine.Output(), longHelp())
@@ -99,8 +102,29 @@ func Review() {
 	llmClient := NewOpenAIClient(llmAPIKey(), baseURL, model)
 	slog.Debug("LLM client configured", "base_url", llmClient.BaseURL, "model", llmClient.Model)
 
-	c := NewCoordinator(defaultAgents(llmClient), repoName, llmClient)
+	agents := defaultAgents(llmClient)
+	customAgents := false
+	masterOverride := ""
+	if loadAgents {
+		set, err := loadCustomAgentGroup(ctx, ghb, owner, repoName, llmClient.Model)
+		if err != nil {
+			slog.Warn("could not load .anubis-agents; using the built-in agents", "error", err)
+		} else {
+			agents, customAgents = selectAgents(set.Specialists, llmClient)
+			masterOverride = set.MasterPrompt
+			slog.Debug("custom agent set resolved",
+				"custom_specialists", len(set.Specialists), "builtins_replaced", customAgents,
+				"custom_master", masterOverride != "", "ref", set.Ref)
+		}
+	}
+
+	c := NewCoordinator(agents, repoName, llmClient)
 	c.MaxConcurrency = maxConcurrency()
+	if customAgents {
+		c.AgentSource = agentsDir
+	}
+	c.MasterPrompt = masterOverride
+	c.IsCustomMaster = masterOverride != ""
 
 	c.SetPRdetails(&pr, diff)
 	slog.Debug("coordinator created", "agent_count", len(c.Agents), "max_concurrency", c.MaxConcurrency)
@@ -135,6 +159,12 @@ func Review() {
 // silently truncated a huge diff reads as a clean bill of health, which it is not.
 func caveats(c *Coordinator) string {
 	var b strings.Builder
+	if c.AgentSource != "" {
+		fmt.Fprintf(&b, "\n\n---\n_User defined agents were loaded from `%s/` instead of the built-ins._", c.AgentSource)
+	}
+	if c.IsCustomMaster {
+		fmt.Fprintf(&b, "\n\n---\n_User Defined Coordinator agent loaded from: `%s/%s`._", agentsDir, masterAgentFile)
+	}
 	if c.DiffTruncated() {
 		b.WriteString("\n\n---\n_Diff too large to review in full; findings cover a truncated diff._")
 	}
@@ -205,6 +235,9 @@ Flags:
         GitHub token (env GITHUB_TOKEN)
   -publish
         publish the review as a PR comment
+  -agents
+        load review agents from .anubis-agents on the default branch
+        (env ANUBIS_AGENTS)
   -log-level string
         log level: debug, info, warn, error (default "info")
   -h    show this help
@@ -219,6 +252,10 @@ Environment:
         base URL and model of that endpoint
   ANUBIS_MAX_CONCURRENCY
         how many specialist reviewers may run at once (default ` + strconv.Itoa(defaultMaxConcurrency) + `, which runs them one after another). Raise it to trade rate-limit headroom for wall-clock time.
+  ANUBIS_AGENTS
+        when true, load review agents from ` + agentsDir + `/ on the default
+        branch. A directory with at least one valid *.md replaces the built-in
+        specialists; ` + masterAgentFile + ` there overrides the coordinator.
 
 Examples:
   anubis -repo owner/name -pr 42
@@ -231,21 +268,28 @@ Examples:
 
 // defaultAgents returns the built-in specialist reviewers. Every agent reviews
 // the whole diff through its own lens; the coordinator then validates and merges
-// their findings.
+// their findings. Each agent's system prompt is the embedded specialist prompt
+// authored under cmd/anubis/specialist, so the review guidance lives as
+// reviewable Markdown rather than Go string literals.
 func defaultAgents(llmClient *OpenAIClient) []*Agent {
-	descriptions := []struct{ name, description string }{
-		{"security", "Look for authentication, authorization, injection, data exposure, and secret-handling issues."},
-		{"correctness", "Look for concrete bugs, incorrect edge cases, and behavioral regressions introduced by this change."},
-		{"performance", "Look for avoidable latency, excessive resource use, inefficient algorithms, and scalability problems."},
-		{"maintainability", "Look for maintainability, readability, testing, error-handling, and established best-practice problems."},
+	specs := []struct {
+		name         string
+		description  string
+		systemPrompt string
+	}{
+		{"security", "Look for authentication, authorization, injection, data exposure, and secret-handling issues.", securityAgentPrompt},
+		{"correctness", "Look for concrete bugs, incorrect edge cases, and behavioral regressions introduced by this change.", correctnessAgentPrompt},
+		{"performance", "Look for avoidable latency, excessive resource use, inefficient algorithms, and scalability problems.", performanceAgentPrompt},
+		{"maintainability", "Look for maintainability, readability, testing, error-handling, and established best-practice problems.", maintainabilityAgentPrompt},
 	}
-	agents := make([]*Agent, 0, len(descriptions))
-	for _, d := range descriptions {
+	agents := make([]*Agent, 0, len(specs))
+	for _, s := range specs {
 		agents = append(agents, &Agent{
 			AgentCard: &AgentCard{
-				Name:        d.name,
-				Description: d.description,
-				Model:       llmClient.Model,
+				Name:         s.name,
+				Description:  s.description,
+				Model:        llmClient.Model,
+				SystemPrompt: s.systemPrompt,
 			},
 			LlmClient: llmClient,
 		})

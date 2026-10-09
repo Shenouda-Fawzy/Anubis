@@ -64,8 +64,14 @@ jobs:
           anubis-llm-base-url: https://api.deepseek.com
           anubis-llm-model: deepseek-chat
 
-          # Control whether sub-agents runs concurrently, max=4.
+          # Control whether sub-agents runs concurrently, max=16.
           anubis-max-concurrency: '1'
+
+          # Load reviewers from .anubis-agents/ at the repository root on the
+          # default branch. When it has at least one valid *.md it replaces the
+          # built-in specialists; a master-agent.md there overrides the
+          # coordinator. Off by default. See docs/behavior.md#custom-agents.
+          anubis-agents: 'false'
 
           # allowed options [info, debug, warning, error]
           anubis-log-level: info

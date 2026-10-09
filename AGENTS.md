@@ -15,7 +15,7 @@ Guidance for coding agents working in this repository.
 - Vet: `make vet`. Lint: `make lint` (golangci-lint; see `.golangci.yml`).
 - CI (`.github/workflows/ci.yml`) runs `gofmt -l cmd`, `go vet`, `go test -race`,
   `golangci-lint` and `docker build`. Keep all five green.
-- The only third-party dependency is `github.com/google/go-github/v90`. Prefer the
+- The only third-party dependency is `github.com/google/go-github/v92`. Prefer the
   standard library; do not add dependencies without a reason worth stating in
   the PR.
 
@@ -31,14 +31,16 @@ Everything lives in `package main` under `cmd/anubis`. There is no `pkg/` tree.
 | `openai.go` | OpenAI-compatible `/chat/completions` client and response parsing |
 | `completion.go` | Request/response wire types shared by agents and the coordinator |
 | `subagent_new.go` | `Agent`, the `ChatCompleter` interface, per-agent review |
-| `subagentprompt.go` | Specialist system prompt and the per-agent task renderer |
+| `subagentprompt.go` | Generic specialist system prompt (fallback) and the per-agent task renderer |
+| `agents.go` | Optional `.anubis-agents` loader: front-matter parser, trusted-ref fetch, custom specialist/coordinator selection |
 | `coordinator.go` | Concurrent agent fan-out, synthesis call, result state |
-| `masterprompt.go` | Coordinator system prompt |
+| `prompts.go` | `go:embed` of `specialist/*.md`, the specialist and coordinator system prompts |
+| `specialist/*.md` | The review prompts themselves, one file per agent plus the coordinator |
 | `reviewprompt.go` | Coordinator user-message template |
 | `log_color.go` | Optional ANSI coloring of the slog text output |
 
 Flow: load PR and diff → run all agents (concurrency from `ANUBIS_MAX_CONCURRENCY`,
-default 1, hard ceiling 4) → synthesize with the coordinator → optionally post as
+default 1, hard ceiling 16) → synthesize with the coordinator → optionally post as
 a PR comment.
 
 ## Non-obvious behavior
@@ -52,9 +54,10 @@ a PR comment.
   change `cli.go`, `action.yml`, `docs/configuration.md`, the help text and
   `TestLLMAPIKeyReadsDocumentedVariable` together.
 - **Every variable and input Anubis owns is prefixed: `ANUBIS_` in the
-  environment, `anubis-` in `action.yml`.** The five Anubis-owned inputs are
+  environment, `anubis-` in `action.yml`.** The six Anubis-owned inputs are
   `anubis-llm-api-key`, `anubis-llm-base-url`, `anubis-llm-model`,
-  `anubis-log-level` and `anubis-max-concurrency`. Nothing in the codebase may
+  `anubis-log-level`, `anubis-max-concurrency` and `anubis-agents`. Nothing in
+  the codebase may
   name a model provider in a variable, flag or input: one protocol, many
   providers, and the credential is the provider's key whoever serves it. The
   GitHub-side names — the `GITHUB_*` variables and the `github-token`, `repo`,
@@ -76,15 +79,17 @@ a PR comment.
   argument list silently shifts every value and injects `%!s(MISSING)`.
   `TestReviewPromptArgumentsAreAligned` exists to catch exactly that.
 - **Agents receive the diff; the coordinator prompt is not for them.** Each
-  specialist gets `subAgentPrompt` as its system message and a task rendered by
-  `subAgentTask` that embeds the PR context and the full diff. `Agent.Review`
-  takes a non-empty `pr.Diff` and returns an error otherwise.
+  specialist sends its own embedded system prompt (its `specialist/*.md` file)
+  and a task rendered by `subAgentTask` that embeds the PR context and the full
+  diff. An agent with no `SystemPrompt` falls back to `subAgentPrompt`, the
+  generic specialist prompt. `Agent.Review` takes a non-empty `pr.Diff` and
+  returns an error otherwise.
 - **Agents may run concurrently, but findings are folded in configured order**
   (`Coordinator.runAgents`), so the synthesis prompt is stable across runs. Each
   goroutine writes only its own `Agent.Finding`; run `go test -race` if you touch
   this. The default is **sequential** (`defaultMaxConcurrency = 1`) to avoid
   rate limits; `Coordinator.MaxConcurrency` raises it, and the `concurrency()`
-  helper clamps it to the agent count and to `maxConcurrentAgents` (4).
+  helper clamps it to the agent count and to `maxConcurrentAgents` (16).
 - **Partial failure is tolerated, total failure is not.** One failed agent still
   produces a review, and the comment discloses how many agents failed. If no
   agent produced a finding, `Review` returns an error and the comment becomes a
@@ -107,9 +112,24 @@ a PR comment.
   context window rather than a cap we set.
 - **Logs go to stderr** via `log/slog` as structured text. ANSI color only for a
   TTY unless forced with `ANUBIS_LOG_COLOR=always`; `NO_COLOR` disables it.
-- **Markdown-defined agents are not part of the initial release.** There is no
-  `-agents` flag, no front-matter parsing and no `pkg/agents` loader. Do not
-  reintroduce them without a design discussion.
+- **The built-in prompts are Markdown embedded at build time.** `prompts.go`
+  embeds `cmd/anubis/specialist/*.md` via `go:embed`; one file per specialist plus
+  `master-agent.md` for the coordinator. `go:embed` cannot reach outside the
+  package directory, so the files must stay under `cmd/anubis/`. Editing a prompt
+  changes every review for every user.
+- **Custom agents are read at run time from `.anubis-agents/` on the default
+  branch, and only the default branch.** `anubis-agents` (default `false`) turns
+  it on; `agents.go` lists and fetches the directory over the Contents API, so
+  there is no checkout and the container stays off the workspace. A directory
+  with at least one valid `*.md` **replaces** the built-in specialists; a file
+  named exactly `master-agent.md` overrides the coordinator and is never a
+  specialist. The body is the agent's system prompt (front-matter is stripped);
+  `name` defaults to the filename, `description` to a generic focus, `model` to
+  `ANUBIS_LLM_MODEL`. Bounds: 16 files, 64 KiB each. Every failure falls back to
+  the built-ins with a warning, and the published comment discloses when custom
+  specialists or a custom coordinator were used. Reading from the PR head would
+  let a contributor rewrite the instructions that review their own change — do
+  not do it.
 - `go.mod` requires the 1.26.x toolchain.
 
 ## GitHub Action packaging

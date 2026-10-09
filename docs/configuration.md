@@ -8,7 +8,7 @@ action works with a single input.
 Passed with `with:` in your workflow step.
 
 [`examples/anubis.yml`](../examples/anubis.yml) is a complete workflow with all
-ten of these written out, if you would rather copy than assemble.
+eleven of these written out, if you would rather copy than assemble.
 
 | Input | Default | Purpose |
 | --- | --- | --- |
@@ -22,6 +22,7 @@ ten of these written out, if you would rather copy than assemble.
 | `anubis-llm-api-key` | *(empty)* | Bearer token for the model endpoint. Works with any OpenAI-compatible provider — see [Providers](providers.md) for each one's base URL. |
 | `anubis-log-level` | `info` | `debug`, `info`, `warn` or `error`. Debug never logs diff content. |
 | `anubis-max-concurrency` | `1` | How many specialists may run at once. `1` runs them one after another — see [Concurrency](behavior.md#concurrency). |
+| `anubis-agents` | `false` | Load review agents from `.anubis-agents/` at the repository root on the default branch. See [Custom agents](behavior.md#custom-agents). |
 
 ## CLI flags
 
@@ -33,6 +34,7 @@ ten of these written out, if you would rather copy than assemble.
   -github-base-url     GitHub API base URL              (env GITHUB_API_URL)
   -github-token        GitHub token                     (env GITHUB_TOKEN)
   -publish             publish the review as a PR comment
+  -agents              load review agents from .anubis-agents   (env ANUBIS_AGENTS)
   -log-level string    debug, info, warn, error         (env ANUBIS_LOG_LEVEL)
 ```
 
@@ -48,6 +50,7 @@ Run `./anubis -h` for the same list with fuller descriptions.
 | `GITHUB_API_URL` | Default for `-github-base-url`. |
 | `ANUBIS_LLM_MODEL`, `ANUBIS_LLM_BASE_URL`, `ANUBIS_LOG_LEVEL` | Defaults for the matching flags. |
 | `ANUBIS_MAX_CONCURRENCY` | How many specialists run at once. Default `1`. See [Concurrency](behavior.md#concurrency). |
+| `ANUBIS_AGENTS` | When truthy, load review agents from `.anubis-agents/` on the default branch. Default `false`. See [Custom agents](behavior.md#custom-agents). |
 | `ANUBIS_LOG_COLOR` | `always` or `never` to force or suppress ANSI color. `NO_COLOR` also works. |
 
 Every flag has an environment variable except `-publish`, which defaults to

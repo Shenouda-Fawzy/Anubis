@@ -17,10 +17,11 @@ Near term, roughly in priority order:
   providers that do not support it.
 - **Server-side pull-request review comments** instead of a single summary
   comment, so findings land inline on the diff.
-- **Configurable agent set.** The four built-in specialists are hard-coded. A
-  reviewed, minimal configuration format for adding or removing specialists is
-  wanted, but the earlier Markdown-with-front-matter approach was dropped
-  before the first release and should not be reintroduced without a design
-  discussion.
+- **Custom agent sets.** Shipped: a repository can replace the built-in
+  specialists and the coordinator with Markdown files under `.anubis-agents/` on
+  the default branch (see [Behavior](docs/behavior.md#custom-agents)). Not yet
+  supported: reading the directory from a ref other than the default branch, and
+  subdirectories. The trusted-ref rule (default branch, never the PR head) is
+  deliberate and should not be relaxed without a security review.
 - **Cost and latency reporting.** Token counts are logged at debug level; surfacing
   them as step outputs would help consumers budget.

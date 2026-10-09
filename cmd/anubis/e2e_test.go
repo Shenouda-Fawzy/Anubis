@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -100,6 +101,16 @@ const (
 	e2eCorrectnessFinding = "Correctness finding: the new handler never writes a response on the empty-id path."
 	e2ePerformanceFinding = "Performance finding: the inner loop runs in O(n^2) over the user list."
 	e2eStandardsFinding   = "Coding standards finding: the error return from db.Close is ignored."
+	e2eCustomFinding      = "Custom agent finding: the commit message does not reference the issue."
+)
+
+// e2e custom agent fixtures: a repository-supplied specialist and coordinator.
+const (
+	e2eCustomAgentName = "custom.md"
+	e2eCustomAgentBody = "---\nname: custom\ndescription: custom review focus\n---\n" +
+		"You are a custom reviewer.\n"
+	e2eCustomMasterName = "master-agent.md"
+	e2eCustomMasterBody = "---\nname: master-agent\n---\nYou are the custom coordinator.\n"
 )
 
 const e2eFinalReview = "### [warning] Parameterize the SQL query in handleUsers\n\n" +
@@ -107,19 +118,77 @@ const e2eFinalReview = "### [warning] Parameterize the SQL query in handleUsers\
 	"Use parameterized statements instead.\n"
 
 // mockGitHub reproduces the handful of REST endpoints the CLI touches:
-// GET repos/{owner}/{repo}/pulls/{n} (JSON, or raw diff by Accept header) and
-// POST repos/{owner}/{repo}/issues/{n}/comments.
+// GET repos/{owner}/{repo}/pulls/{n} (JSON, or raw diff by Accept header),
+// POST repos/{owner}/{repo}/issues/{n}/comments, and — when the custom-agent
+// test is running — the default branch and .anubis-agents contents.
 type mockGitHub struct {
 	mu           sync.Mutex
 	prRequests   int
 	diffRequests int
 	comments     []string
+	// agentFiles backs the .anubis-agents contents endpoints. Empty means the
+	// directory is not served; add a helper or set it directly in a test.
+	agentFiles map[string]string
+}
+
+// setAgentFiles installs the agents directory served to a run. It takes the
+// lock because the mock server may already be handling requests.
+func (m *mockGitHub) setAgentFiles(files map[string]string) {
+	m.mu.Lock()
+	m.agentFiles = files
+	m.mu.Unlock()
 }
 
 func (m *mockGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	m.mu.Lock()
+	agentFiles := m.agentFiles
+	m.mu.Unlock()
 
 	switch {
+	case len(parts) == 3 && parts[0] == "repos" && r.Method == http.MethodGet:
+		// GET repos/{owner}/{repo}: the default branch agents are read from.
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"default_branch":"main"}`)
+		return
+
+	case len(parts) == 5 && parts[0] == "repos" && parts[3] == "contents" && r.Method == http.MethodGet:
+		// Directory listing for .anubis-agents.
+		if agentFiles == nil {
+			http.NotFound(w, r)
+			return
+		}
+		entries := make([]map[string]any, 0, len(agentFiles))
+		for name, body := range agentFiles {
+			entries = append(entries, map[string]any{
+				"name": name,
+				"path": ".anubis-agents/" + name,
+				"type": "file",
+				"size": len(body),
+			})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(entries)
+		return
+
+	case len(parts) == 6 && parts[0] == "repos" && parts[3] == "contents" && r.Method == http.MethodGet:
+		name := parts[5]
+		body, ok := agentFiles[name]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"name":     name,
+			"path":     ".anubis-agents/" + name,
+			"type":     "file",
+			"size":     len(body),
+			"content":  base64.StdEncoding.EncodeToString([]byte(body)),
+			"encoding": "base64",
+		})
+		return
+
 	case len(parts) == 5 && parts[0] == "repos" && parts[3] == "pulls" && r.Method == http.MethodGet:
 		if strings.Contains(r.Header.Get("Accept"), "diff") {
 			m.mu.Lock()
@@ -228,6 +297,11 @@ func (m *mockLLM) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		m.agentCalls++
 		m.mu.Unlock()
 		_, _ = w.Write(llmResponseJSON(e2eStandardsFinding))
+	case strings.Contains(user, "custom review focus"):
+		m.mu.Lock()
+		m.agentCalls++
+		m.mu.Unlock()
+		_, _ = w.Write(llmResponseJSON(e2eCustomFinding))
 	default:
 		m.mu.Lock()
 		m.unexpected++
@@ -352,6 +426,53 @@ func TestE2EFullReviewPublishesComment(t *testing.T) {
 	}
 	if got := h.llm.unexpectedCount(); got != 0 {
 		t.Errorf("unexpected LLM requests = %d, want 0", got)
+	}
+}
+
+// TestE2ECustomAgents drives the -agents path end to end: the agent set is
+// loaded from .anubis-agents on the default branch, replaces the built-ins, and
+// master-agent.md overrides the coordinator. The published comment discloses
+// both so a reader knows the built-in pipeline was replaced.
+func TestE2ECustomAgents(t *testing.T) {
+	h, ghURL, llmURL := newE2EHarness(t)
+	h.github.setAgentFiles(map[string]string{
+		e2eCustomAgentName:  e2eCustomAgentBody,
+		e2eCustomMasterName: e2eCustomMasterBody,
+	})
+
+	out, code := runAnubis(
+		t,
+		"-repo", e2eOwner+"/"+e2eRepo,
+		"-pr", "1",
+		"-github-base-url", ghURL,
+		"-llm-base-url", llmURL,
+		"-model", "e2e-model",
+		"-publish",
+		"-agents",
+	)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0\noutput:\n%s", code, out)
+	}
+
+	// Only the single custom specialist runs; the four built-ins are replaced.
+	if got := h.llm.agentCallsCount(); got != 1 {
+		t.Errorf("LLM agent calls = %d, want 1 (custom specialist only)", got)
+	}
+	if got := h.llm.synthesisCallsCount(); got != 1 {
+		t.Errorf("LLM synthesis calls = %d, want 1", got)
+	}
+	if got := h.llm.unexpectedCount(); got != 0 {
+		t.Errorf("unexpected LLM requests = %d, want 0", got)
+	}
+
+	comments := h.github.commentBodies()
+	if len(comments) != 1 {
+		t.Fatalf("comments posted = %d, want 1", len(comments))
+	}
+	for _, want := range []string{e2eFinalReview, agentsDir + "/", masterAgentFile} {
+		if !strings.Contains(comments[0], want) {
+			t.Errorf("comment does not mention %q:\n%s", want, comments[0])
+		}
 	}
 }
 

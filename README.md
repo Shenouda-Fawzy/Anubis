@@ -4,11 +4,7 @@
 [![action version](https://img.shields.io/github/v/release/Shenouda-Fawzy/Anubis?label=action%20v1)](https://github.com/Shenouda-Fawzy/Anubis/releases/latest)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Anubis reviews pull requests with a panel of specialist AI reviewers, then has a
-coordinator validate and deduplicate their findings into one high-signal review
-that it posts as a pull-request comment.
-
-Static Go binary, Docker-based GitHub Action. No server, nothing to host.
+Anubis is a Github action (_and cli_) you can use it to review you and your team's PR.  
 
 ## As an action
 
@@ -29,22 +25,11 @@ jobs:
           anubis-llm-api-key: ${{ secrets.ANUBIS_LLM_API_KEY }}
 ```
 
-Two things to set up, and one of them is GitHub's job, not yours:
-
-1. Add **one** secret, `ANUBIS_LLM_API_KEY`, holding your model provider's key
+You only need to add **one** secret, `ANUBIS_LLM_API_KEY`, holding your model provider's key
    (Settings → Secrets and variables → Actions).
-2. Nothing for the GitHub token. It defaults to `${{ github.token }}`, which
-   `pull-requests: write` above is enough to post a comment with.
 
-Everything else has a default: the model is OpenCode Zen's free `big-pickle`,
-the pull request is whichever one triggered the run, and the review is posted
-as a comment. No `actions/checkout` step, because Anubis fetches the diff over
-the API rather than from a working tree.
+See **[`examples/anubis.yml`](examples/anubis.yml) is the complete configuration** —
 
-**[`examples/anubis.yml`](examples/anubis.yml) is the complete configuration** —
-all ten inputs written out, including the GitHub token, the model and the
-endpoint, with the reasoning for each in comments. That file is the reference;
-this page keeps only the minimum you need to get the first review.
 
 ## As a CLI
 
@@ -61,9 +46,13 @@ Zero configuration. It defaults to OpenCode Zen's free `big-pickle` model.
 ## What it does
 
 Four specialists — `security`, `correctness`, `performance` and
-`maintainability` — review the diff one at a time, each with a different focus. A
-coordinator then discards false positives, deduplicates by root cause, and
-re-grades severity. The result is posted as a comment.
+`maintainability` — review the diff one at a time, each with its own review
+prompt and focus. A coordinator then discards false positives, deduplicates by
+root cause, and re-grades severity. The result is posted as a comment.
+
+A repository can replace the panel with its own reviewers: put `*.md` files in
+`.anubis-agents/` at the repo root (see
+[Custom agents](docs/behavior.md#custom-agents)) and set `anubis-agents: 'true'`.
 
 ## Providers
 
@@ -109,28 +98,11 @@ provider.
 | --- | --- |
 | Use another model or provider | `anubis-llm-model`, `anubis-llm-base-url` |
 | Run the reviewers in parallel | `anubis-max-concurrency` |
-| Keep the review out of the PR | `publish: false` |
+| Define your own review agents | `anubis-agents: 'true'` + `.anubis-agents/*.md` |
 | See more detail in the log | `anubis-log-level: debug` |
 
 Every input, flag and environment variable is in
 [docs/configuration.md](docs/configuration.md).
-
-## Documentation
-
-| Page | Covers |
-| --- | --- |
-| [Configuration](docs/configuration.md) | Every input, flag and env var. |
-| [Providers](docs/providers.md) | Which providers work, and how to configure each. |
-| [Behavior](docs/behavior.md) | Truncation, partial failure, logging, concurrency. |
-| [Development](docs/development.md) | Building, testing, code layout. |
-
-## Security
-
-The diff is untrusted input and is uploaded to whichever model endpoint you
-configure. **The default model is not zero-retention** — read
-[docs/providers.md](docs/providers.md#where-your-diff-goes) before pointing this
-at a private repository. See [SECURITY.md](SECURITY.md) to report a
-vulnerability.
 
 ## License
 
