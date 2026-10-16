@@ -98,6 +98,7 @@ provider.
 | --- | --- |
 | Use another model or provider | `anubis-llm-model`, `anubis-llm-base-url` |
 | Run the reviewers in parallel | `anubis-max-concurrency` |
+| Keep the review out of the PR | `publish: false` |
 | Define your own review agents | `anubis-agents: 'true'` + `.anubis-agents/*.md` |
 | See more detail in the log | `anubis-log-level: debug` |
 
