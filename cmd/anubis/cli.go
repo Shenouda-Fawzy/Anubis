@@ -41,17 +41,18 @@ func (o optionalInt) Set(s string) error {
 
 func Review() {
 	var (
-		repo          string
-		pullReqNum    int
-		model         string
-		baseURL       string
-		githubBaseURL string
-		githubToken   string
-		logLevel      string
-		// When true, comment will be added to the PR
-		publishComment bool
-		// When true, load review agents from .anubis-agents on the default branch
-		loadAgents bool
+		repo            string
+		pullReqNum      int
+		model           string
+		baseURL         string
+		githubBaseURL   string
+		githubToken     string
+		logLevel        string
+		publishComment  bool
+		useCustomAgents bool
+		// When set, load .anubis-agents only for pull requests that target
+		// this branch (the base/target branch)
+		allowedTargetBranch string
 	)
 	flag.StringVar(&logLevel, "log-level", envOr("ANUBIS_LOG_LEVEL", "info"), "log level: debug, info, warn, error")
 	flag.StringVar(&repo, "repo", os.Getenv("GITHUB_REPOSITORY"), "repository in 'owner/name' form")
@@ -61,7 +62,8 @@ func Review() {
 	flag.StringVar(&githubBaseURL, "github-base-url", envOr("GITHUB_API_URL", defaultGitHubBaseURL), "GitHub API base URL")
 	flag.StringVar(&githubToken, "github-token", os.Getenv("GITHUB_TOKEN"), "GitHub token")
 	flag.BoolVar(&publishComment, "publish", false, "publish the review as a PR comment")
-	flag.BoolVar(&loadAgents, "agents", envBool("ANUBIS_AGENTS", false), "load review agents from .anubis-agents on the default branch")
+	flag.BoolVar(&useCustomAgents, "agents", envBool("ANUBIS_AGENTS", false), "load review agents from .anubis-agents on the branch under review")
+	flag.StringVar(&allowedTargetBranch, "allowed-target-branch", envOr("ANUBIS_ALLOWED_TARGET_BRANCH", ""), "load .anubis-agents only for pull requests targeting this branch (env ANUBIS_ALLOWED_TARGET_BRANCH)")
 
 	flag.Usage = func() {
 		_, _ = fmt.Fprint(flag.CommandLine.Output(), longHelp())
@@ -103,24 +105,30 @@ func Review() {
 	slog.Debug("LLM client configured", "base_url", llmClient.BaseURL, "model", llmClient.Model)
 
 	agents := defaultAgents(llmClient)
-	customAgents := false
+	extracted := false
 	masterOverride := ""
-	if loadAgents {
-		set, err := loadCustomAgentGroup(ctx, ghb, owner, repoName, llmClient.Model)
+
+	// The user has intention to use custom agents, so error if unable to do it
+	// and shouldn't fallback to built-in agents as it will cause false positive
+	// as the user will might think that the review outcome originated from his
+	// defined custom agents, when it is not.
+	if useCustomAgents {
+		agentsGrp, err := loadCustomAgentsGroup(ctx, ghb, llmClient.Model, pr, strings.TrimSpace(allowedTargetBranch))
 		if err != nil {
-			slog.Warn("could not load .anubis-agents; using the built-in agents", "error", err)
-		} else {
-			agents, customAgents = selectAgents(set.Specialists, llmClient)
-			masterOverride = set.MasterPrompt
-			slog.Debug("custom agent set resolved",
-				"custom_specialists", len(set.Specialists), "builtins_replaced", customAgents,
-				"custom_master", masterOverride != "", "ref", set.Ref)
+			slog.Error("Couldn't load use defined agents in .anubis-agents", "error", err)
+			return
 		}
+		agents, extracted = extractAgents(agentsGrp.Specialists, llmClient)
+		if extracted == false {
+			slog.Error("Unable to use custom agents", "custom agents count", len(agentsGrp.Specialists))
+			return
+		}
+		masterOverride = agentsGrp.MasterPrompt
 	}
 
 	c := NewCoordinator(agents, repoName, llmClient)
 	c.MaxConcurrency = maxConcurrency()
-	if customAgents {
+	if extracted {
 		c.AgentSource = agentsDir
 	}
 	c.MasterPrompt = masterOverride
@@ -236,8 +244,12 @@ Flags:
   -publish
         publish the review as a PR comment
   -agents
-        load review agents from .anubis-agents on the default branch
-        (env ANUBIS_AGENTS)
+        load review agents from .anubis-agents on the branch the pull
+        request proposes (env ANUBIS_AGENTS)
+  -allowed-target-branch string
+        load .anubis-agents only for pull requests targeting this branch
+        (the base branch); empty allows any target branch
+        (env ANUBIS_ALLOWED_TARGET_BRANCH)
   -log-level string
         log level: debug, info, warn, error (default "info")
   -h    show this help
@@ -253,9 +265,15 @@ Environment:
   ANUBIS_MAX_CONCURRENCY
         how many specialist reviewers may run at once (default ` + strconv.Itoa(defaultMaxConcurrency) + `, which runs them one after another). Raise it to trade rate-limit headroom for wall-clock time.
   ANUBIS_AGENTS
-        when true, load review agents from ` + agentsDir + `/ on the default
-        branch. A directory with at least one valid *.md replaces the built-in
-        specialists; ` + masterAgentFile + ` there overrides the coordinator.
+        when true, load review agents from ` + agentsDir + `/ on the branch the
+        pull request proposes, read from whatever repository that branch lives
+        in (a fork included). A directory with at least one valid *.md replaces
+        the built-in specialists; ` + masterAgentFile + ` there overrides the
+        coordinator.
+  ANUBIS_ALLOWED_TARGET_BRANCH
+        restrict those custom agents to pull requests that target this branch
+        (the base branch: main, development, staging ...). Empty allows any
+        target branch.
 
 Examples:
   anubis -repo owner/name -pr 42

@@ -30,17 +30,39 @@ type agentGroup struct {
 	Ref          string
 }
 
-// Load custom agent group from the repo, use GH api to directly locate it
-// the directory (.anubis-agents) should be in the root anyway
-func loadCustomAgentGroup(ctx context.Context, gh *Client, owner, repo, defaultModel string) (*agentGroup, error) {
+func loadCustomAgentsGroup(ctx context.Context, gh *Client, defaultModel string, pr PullRequest, allowedTargetBranch string) (*agentGroup, error) {
 	if gh == nil {
 		return nil, errors.New("GH client not init")
 	}
-	branchName, err := gh.GetDefaultBranch(ctx, owner, repo)
-	if err != nil {
-		return nil, fmt.Errorf("resolve default branch: %w", err)
+	if err := ensureTargetAllowed(pr, allowedTargetBranch); err != nil {
+		slog.Error("PR target branch mismatch with the allowed target branch", "reason", err.Error())
+		slog.Info("Ensure your target branch is allowed in anubis-allowed-target-branch in anubis.yml ")
+		return nil, err
 	}
-	return loadAgentGroup(ctx, gh, owner, repo, branchName, defaultModel)
+
+	// Read from the repository that holds the head branch, which is the fork
+	// for a pull request from a fork. agentGate has checked owner/name form.
+	owner, repo, _ := strings.Cut(pr.Repository, "/")
+	return loadAgentGroup(ctx, gh, owner, repo, pr.SourceBranch, defaultModel)
+}
+
+// ensure target branch is allowed, empty target means allow all
+func ensureTargetAllowed(pr PullRequest, allowedTargetBranch string) error {
+	if pr.Repository == "" {
+		return errors.New("pull request head repository is unknown")
+	}
+	if _, _, ok := strings.Cut(pr.Repository, "/"); ok == false {
+		return fmt.Errorf("head repository %q is not in owner/name form", pr.Repository)
+	}
+	if pr.SourceBranch == "" {
+		return errors.New("pull request has no head branch")
+	}
+
+	// Target branch is set, ensure it matches PR's target branch
+	if allowedTargetBranch != "" && allowedTargetBranch != pr.TargetBranch {
+		return fmt.Errorf("target branch %q is not the allowed target branch %q", pr.TargetBranch, allowedTargetBranch)
+	}
+	return nil
 }
 
 // load the custom agents via GH directory listing APIs
@@ -207,9 +229,9 @@ func trimQuotes(s string) string {
 }
 
 // use default agents if no custom agents provided
-func selectAgents(custom []*AgentCard, llmClient *OpenAIClient) ([]*Agent, bool) {
+func extractAgents(custom []*AgentCard, llmClient *OpenAIClient) ([]*Agent, bool) {
 	if len(custom) == 0 {
-		return defaultAgents(llmClient), false
+		return nil, false
 	}
 	agents := make([]*Agent, 0, len(custom))
 	for _, card := range custom {

@@ -43,10 +43,13 @@ func NewGithubClient(token, baseURL string) (*Client, error) {
 }
 
 type PullRequest struct {
-	Number      int    `json:"number"`
-	Title       string `json:"title"`
-	Description string `json:"body"`
-	HTMLURL     string `json:"html_url"`
+	Number       int    `json:"number"`
+	Title        string `json:"title"`
+	Description  string `json:"body"`
+	HTMLURL      string `json:"html_url"`
+	SourceBranch string
+	Repository   string
+	TargetBranch string
 }
 
 type File struct {
@@ -65,11 +68,15 @@ func (c *Client) GetPullRequest(ctx context.Context, owner, repo string, number 
 	if err != nil {
 		return PullRequest{}, err
 	}
+	head := pr.GetHead()
 	return PullRequest{
-		Number:      pr.GetNumber(),
-		Title:       pr.GetTitle(),
-		Description: pr.GetBody(),
-		HTMLURL:     pr.GetHTMLURL(),
+		Number:       pr.GetNumber(),
+		Title:        pr.GetTitle(),
+		Description:  pr.GetBody(),
+		HTMLURL:      pr.GetHTMLURL(),
+		SourceBranch: head.GetRef(),
+		Repository:   head.GetRepo().GetFullName(),
+		TargetBranch: pr.GetBase().GetRef(),
 	}, nil
 }
 
@@ -107,20 +114,6 @@ func (c *Client) ListFiles(ctx context.Context, owner, repo string, number int) 
 		}
 		opts.Page = resp.NextPage
 	}
-}
-
-// Default repo branch i.e. main/master/staging ... etc whatever the owner specified at as
-// default branch on Github settings. On Github free plan, it is the main branch
-func (c *Client) GetDefaultBranch(ctx context.Context, owner, repo string) (string, error) {
-	r, _, err := c.GhbClient.Repositories.Get(ctx, owner, repo)
-	if err != nil {
-		return "", err
-	}
-	branch := r.GetDefaultBranch()
-	if branch == "" {
-		return "", fmt.Errorf("repository %s/%s has no default branch", owner, repo)
-	}
-	return branch, nil
 }
 
 // directoryEntry is the subset of a repository directory listing that Anubis
