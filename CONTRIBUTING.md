@@ -37,12 +37,13 @@ Please also add a test. A new behavior without a test is not finished. Run
 
 ## Changing the review pipeline
 
-The prompts in `masterprompt.go` and `subagentprompt.go` are the product. A
-prompt edit changes every review for every user, so:
+The prompts under `cmd/anubis/specialist/*.md` (embedded via `prompts.go`) are
+the product. A prompt edit changes every review for every user, so:
 
-- Keep the coordinator and the specialists distinct. Specialists gather
-  evidence; the coordinator judges it. Do not make specialists arbitrate, and do
-  not make the coordinator re-review the whole diff.
+- Keep the coordinator (`master-agent.md`) and the specialists distinct.
+  Specialists gather evidence; the coordinator judges it. Do not make
+  specialists arbitrate, and do not make the coordinator re-review the whole
+  diff.
 - Agents must receive the diff. If you add an agent, render its task with
   `subAgentTask` so the PR context and diff come along.
 - Findings stay free-form Markdown. There is no JSON schema, no severity field

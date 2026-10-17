@@ -75,6 +75,12 @@ What Anubis does **not** do, and does not claim to:
   `pull_request_target` gives fork pull requests write access to your
   repository. Prefer `pull_request`, and accept that fork PRs will not have
   access to your model key.
+- **A fork can supply its own reviewers when `anubis-agents` is on.** The
+  custom-agent loader reads `.anubis-agents/` from the pull request's head
+  branch, including a branch that lives in a fork, so an outside contributor can
+  write the instructions that review their own change. Leave `anubis-agents` off
+  if that matters to you. `anubis-allowed-target-branch` narrows the load to
+  pull requests targeting one branch, but it does not restore the fork boundary.
 
 ## Verifying a release
 

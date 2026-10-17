@@ -58,7 +58,7 @@ func TestCoordinatorReviewNoAgents(t *testing.T) {
 	c.SetPRdetails(&PullRequest{Number: 1}, "diff")
 
 	err := c.Review(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "no review agents configured") {
+	if err == nil || strings.Contains(err.Error(), "no review agents configured") == false {
 		t.Fatalf("Review() error = %v, want a no-agents error", err)
 	}
 }
@@ -102,7 +102,7 @@ func TestReviewPromptArgumentsAreAligned(t *testing.T) {
 		"THE_DIFF",
 		"<reviewer-finding>",
 	} {
-		if !strings.Contains(sent, want) {
+		if strings.Contains(sent, want) == false {
 			t.Errorf("synthesis prompt is missing %q", want)
 		}
 	}
@@ -170,15 +170,16 @@ func TestCoordinatorRespectsPartialConcurrency(t *testing.T) {
 
 // An absurd value must not fan out without bound.
 func TestCoordinatorClampsConcurrencyToTheHardCeiling(t *testing.T) {
-	c, llm := newConcurrencyHarness(t, 6, 1000)
+	agents := maxConcurrentAgents + 4
+	c, llm := newConcurrencyHarness(t, agents, 1000)
 	if err := c.Review(context.Background()); err != nil {
 		t.Fatalf("Review() error = %v", err)
 	}
 	if got := llm.peakConcurrency(); got > maxConcurrentAgents {
 		t.Errorf("peak in-flight agent calls = %d, want at most %d", got, maxConcurrentAgents)
 	}
-	if got := llm.agentCount(); got != 6 {
-		t.Errorf("agent completions = %d, want 6", got)
+	if got := llm.agentCount(); got != agents {
+		t.Errorf("agent completions = %d, want %d", got, agents)
 	}
 }
 
@@ -249,7 +250,7 @@ func TestCoordinatorToleratesPartialAgentFailure(t *testing.T) {
 	if f[0].Name != "security" {
 		t.Errorf("failed agent = %q, want %q", f[0].Name, "security")
 	}
-	if got := caveats(c); !strings.Contains(got, "1 of 2 review agents failed (security)") {
+	if got := caveats(c); strings.Contains(got, "1 of 2 review agents failed (security)") == false {
 		t.Errorf("caveats = %q, want it to disclose the failed agent", got)
 	}
 }
@@ -267,7 +268,7 @@ func TestCoordinatorFailsWhenEveryAgentFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("Review() error = nil, want an error when no agent produced a finding")
 	}
-	if !strings.Contains(err.Error(), "all 2 review agents failed") {
+	if strings.Contains(err.Error(), "all 2 review agents failed") == false {
 		t.Errorf("Review() error = %q, want it to name the total failure", err)
 	}
 }
@@ -283,7 +284,7 @@ func TestTruncateDiff(t *testing.T) {
 	if len(got) >= len(big) {
 		t.Errorf("truncated length = %d, want less than the original %d", len(got), len(big))
 	}
-	if !strings.Contains(got, "diff truncated") {
+	if strings.Contains(got, "diff truncated") == false {
 		t.Error("truncated diff is missing its marker")
 	}
 	if strings.HasSuffix(strings.TrimSpace(got), "diff of a file\nd") {
@@ -303,6 +304,27 @@ func TestCaveatsAreEmptyOnACleanReview(t *testing.T) {
 	}
 }
 
+// A run that used the repository's own specialists, or its own coordinator,
+// must say so, otherwise a reader cannot tell whose instructions produced the
+// findings.
+func TestCaveatsDiscloseCustomAgents(t *testing.T) {
+	llm := &fakeCompleter{result: &CompletionResponse{Content: "clean", FinishReason: "stop"}}
+	c := NewCoordinator(testAgents(llm), "acme/widgets", llm)
+	c.SetPRdetails(&PullRequest{Number: 1}, "diff")
+	c.AgentSource = agentsDir
+	c.IsCustomMaster = true
+	if err := c.Review(context.Background()); err != nil {
+		t.Fatalf("Review() error = %v", err)
+	}
+	got := caveats(c)
+	if strings.Contains(got, agentsDir) == false {
+		t.Errorf("caveats = %q, want a disclosure naming %s", got, agentsDir)
+	}
+	if strings.Contains(got, masterAgentFile) == false {
+		t.Errorf("caveats = %q, want a custom-coordinator disclosure naming %s", got, masterAgentFile)
+	}
+}
+
 func TestCaveatsDiscloseTruncatedDiff(t *testing.T) {
 	llm := &fakeCompleter{result: &CompletionResponse{Content: "clean", FinishReason: "stop"}}
 	c := NewCoordinator(testAgents(llm), "acme/widgets", llm)
@@ -310,7 +332,7 @@ func TestCaveatsDiscloseTruncatedDiff(t *testing.T) {
 	if err := c.Review(context.Background()); err != nil {
 		t.Fatalf("Review() error = %v", err)
 	}
-	if got := caveats(c); !strings.Contains(got, "truncated diff") {
+	if got := caveats(c); strings.Contains(got, "truncated diff") == false {
 		t.Errorf("caveats = %q, want a truncation disclosure", got)
 	}
 }
@@ -348,7 +370,7 @@ func (r *recordingCompleter) Complete(ctx context.Context, req *CompletionReques
 	// Track how many specialist calls are in flight at once. Only the
 	// coordinator's single synthesis call is excluded, so the peak measures the
 	// fan-out the coordinator actually produced.
-	if !isSynthesis {
+	if isSynthesis == false {
 		cur := r.inFlight.Add(1)
 		for {
 			was := r.peak.Load()
@@ -403,7 +425,7 @@ func (r *recordingCompleter) synthesisPrompt() string {
 // is how these tests tell the specialists apart.
 func focusFromTask(task string) string {
 	_, rest, found := strings.Cut(task, "# Your focus")
-	if !found {
+	if found == false {
 		return ""
 	}
 	focus, _, _ := strings.Cut(rest, "# Pull Request")
@@ -424,7 +446,7 @@ func TestCoordinatorEmptyProviderOutputIsAFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("Review() error = nil, want an error when every agent returns nothing")
 	}
-	if !strings.Contains(err.Error(), "all 2 review agents failed") {
+	if strings.Contains(err.Error(), "all 2 review agents failed") == false {
 		t.Errorf("Review() error = %q, want it to report every agent failed", err)
 	}
 	if c.FindingsText() != "" {
@@ -449,7 +471,7 @@ func TestCoordinatorMixedEmptyAndRealFindings(t *testing.T) {
 	if len(f) != 1 || f[0].Name != "quiet" {
 		t.Fatalf("Failures() = %v, want just the quiet agent", f)
 	}
-	if got := caveats(c); !strings.Contains(got, "1 of 2 review agents failed (quiet)") {
+	if got := caveats(c); strings.Contains(got, "1 of 2 review agents failed (quiet)") == false {
 		t.Errorf("caveats = %q, want the empty agent disclosed", got)
 	}
 }

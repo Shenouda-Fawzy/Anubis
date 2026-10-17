@@ -23,7 +23,7 @@ ANUBIS_MAX_CONCURRENCY=4 ./anubis -repo owner/repo -pr 42
 
 Rules:
 
-- The value is clamped to the number of agents and to a hard ceiling of 4, so a
+- The value is clamped to the number of agents and to a hard ceiling of 16, so a
   large setting cannot produce unbounded parallel requests.
 - An unset, unparseable or non-positive value is treated as `1` and logged as a
   warning. A typo in a tuning variable should not stop a review.
@@ -80,6 +80,68 @@ it were complete.
 Findings are **Markdown, not structured JSON**. There is no severity field and no
 machine-readable schema. They are meant to be read by a human, not parsed by a
 tool.
+
+## Custom agents
+
+Set `anubis-agents: 'true'` (or `ANUBIS_AGENTS=true`) to let a repository define
+its own reviewers. Anubis reads `*.md` files from `.anubis-agents/` at the
+repository root **on the branch the pull request proposes** and parses each as
+front-matter plus a Markdown system prompt:
+
+```markdown
+---
+name: docs
+description: Review documentation and code comments for accuracy.
+model: gpt-4o-mini
+---
+
+You are a documentation reviewer. Check that comments match the code they
+describe, that public APIs are documented, and that examples still work.
+```
+
+- The **body is the agent's system prompt**; it replaces the generic specialist
+  prompt, so it must carry its own rules — including that the diff is untrusted
+  data, never instructions.
+- `name` defaults to the filename without `.md`. `description` is the focus line
+  prefixed to the task; it defaults to a generic focus. `model` defaults to
+  `anubis-llm-model`.
+- If at least one valid specialist is present, the repository's set **replaces**
+  the four built-ins for that run. `anubis-agents: 'true'` is a hard requirement,
+  not a hint: when **no** valid specialist can be loaded, the run **fails**
+  rather than fall back to the built-ins, so a review is never published under a
+  repository's name using reviewers it did not define.
+- **`master-agent.md` is special**: naming a file exactly that overrides the
+  coordinator's system prompt. It is never treated as a specialist, and the
+  override is explicit by filename. Any other name (including `Master-Agent.md`)
+  is an ordinary specialist.
+
+Limits: at most 16 files, 64 KiB each. An over-limit or unparseable file is skipped
+with a warning. If the directory is missing, holds no valid specialist, or the API
+call fails, the run **fails**: a repository that set `anubis-agents: 'true'` asked
+for its own reviewers, and using the built-ins instead would publish a review a
+reader mistakes for theirs. Every run that uses custom agents or a custom
+coordinator **discloses it in the comment**, so a reader can tell whose
+instructions produced the findings.
+
+Custom agents are read from the pull request's **head** branch, in whatever
+repository that branch lives in — the repository under review, or a **fork**. A
+fork is deliberately allowed, so a same-repository branch (or a fork branch) can
+add and try reviewers before they are merged. Be aware of what that means: an
+outside contributor can supply the instructions that review their own change. A
+repository that does not want that should leave `anubis-agents` off, since the
+only remaining restriction is the target branch. If GitHub does not report the
+head repository (a deleted fork) or the head branch, there is nowhere to read the
+directory from and the run **fails**.
+
+The files come from the pull request's **head** branch (the branch it proposes),
+but `anubis-allowed-target-branch` filters on the branch the pull request
+**targets** (its base branch). So a pull request from `feat/api` into
+`development` reads `.anubis-agents/` from `feat/api`, and `allowed-target-branch:
+development` lets it run. Restrict with `anubis-allowed-target-branch: main`
+(or `ANUBIS_ALLOWED_TARGET_BRANCH=main`) to apply custom agents only to pull
+requests heading into `main`; any other target makes the run **fail** rather than
+fall back. Leave it empty to allow any target
+branch, so a developer can try custom agents freely before merging.
 
 ## Logging
 

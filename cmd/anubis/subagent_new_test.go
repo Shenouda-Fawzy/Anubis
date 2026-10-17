@@ -96,8 +96,29 @@ func TestAgentReviewSuccess(t *testing.T) {
 	if req.Messages[1].Role != "user" {
 		t.Errorf("user message role = %q, want %q", req.Messages[1].Role, "user")
 	}
-	if !strings.Contains(user, "review the diff") {
+	if strings.Contains(user, "review the diff") == false {
 		t.Error("user message does not carry the agent description")
+	}
+}
+
+// An agent with its own prompt must send that prompt as the system message
+// rather than the generic specialist fallback. This is how the embedded
+// Markdown specialists reach the model.
+func TestAgentReviewUsesAgentSystemPrompt(t *testing.T) {
+	const agentPrompt = "# Security Agent\n\nYou are a senior application-security engineer."
+	llm := &fakeCompleter{result: &CompletionResponse{Content: "ok", FinishReason: "stop"}}
+	agent := testAgent(llm)
+	agent.SystemPrompt = agentPrompt
+
+	if err := agent.Review(context.Background(), testPR()); err != nil {
+		t.Fatalf("Review() error = %v", err)
+	}
+	system := llm.request().Messages[0].Content
+	if system != agentPrompt {
+		t.Errorf("system message = %q, want the agent's own prompt", system)
+	}
+	if system == subAgentPrompt {
+		t.Error("agent with a system prompt fell back to the generic specialist prompt")
 	}
 }
 
@@ -111,7 +132,7 @@ func TestAgentReviewSendsDiffAndPRContext(t *testing.T) {
 	}
 	user := llm.request().Messages[1].Content
 	for _, want := range []string{"acme/widgets", "42", "Add users endpoint", "Introduces a public users endpoint.", "handleUsers()"} {
-		if !strings.Contains(user, want) {
+		if strings.Contains(user, want) == false {
 			t.Errorf("user message is missing %q\n%s", want, user)
 		}
 	}
@@ -122,7 +143,7 @@ func TestAgentReviewRejectsEmptyDiff(t *testing.T) {
 	agent := testAgent(llm)
 
 	err := agent.Review(context.Background(), &ReviewRequest{PullReqNumber: 7})
-	if err == nil || !strings.Contains(err.Error(), "empty diff") {
+	if err == nil || strings.Contains(err.Error(), "empty diff") == false {
 		t.Fatalf("Review() error = %v, want an empty-diff error", err)
 	}
 	if llm.request() != nil {
@@ -133,7 +154,7 @@ func TestAgentReviewRejectsEmptyDiff(t *testing.T) {
 func TestAgentReviewNilPullRequest(t *testing.T) {
 	agent := testAgent(&fakeCompleter{})
 	err := agent.Review(context.Background(), nil)
-	if err == nil || !strings.Contains(err.Error(), "invalid pull request") {
+	if err == nil || strings.Contains(err.Error(), "invalid pull request") == false {
 		t.Fatalf("Review() error = %v, want %q", err, "invalid pull request")
 	}
 }
@@ -141,7 +162,7 @@ func TestAgentReviewNilPullRequest(t *testing.T) {
 func TestAgentReviewNilResponse(t *testing.T) {
 	agent := testAgent(&fakeCompleter{result: nil})
 	err := agent.Review(context.Background(), testPR())
-	if err == nil || !strings.Contains(err.Error(), "nil completion response") {
+	if err == nil || strings.Contains(err.Error(), "nil completion response") == false {
 		t.Fatalf("Review() error = %v, want a nil-response error", err)
 	}
 }
@@ -163,7 +184,7 @@ func TestAgentReviewLLMError(t *testing.T) {
 	agent := testAgent(llm)
 
 	err := agent.Review(context.Background(), testPR())
-	if err == nil || !strings.Contains(err.Error(), "boom") {
+	if err == nil || strings.Contains(err.Error(), "boom") == false {
 		t.Fatalf("Review() error = %v, want it to contain %q", err, "boom")
 	}
 	if agent.ReviewStatus != 0 {
@@ -205,7 +226,7 @@ func TestAgentReviewForwardsContext(t *testing.T) {
 func TestAgentReviewNilAgent(t *testing.T) {
 	var agent *Agent
 	err := agent.Review(context.Background(), testPR())
-	if err == nil || !strings.Contains(err.Error(), "invalid agent") {
+	if err == nil || strings.Contains(err.Error(), "invalid agent") == false {
 		t.Fatalf("Review() error = %v, want %q", err, "invalid agent")
 	}
 }
@@ -213,7 +234,7 @@ func TestAgentReviewNilAgent(t *testing.T) {
 func TestAgentReviewNilAgentCard(t *testing.T) {
 	agent := &Agent{}
 	err := agent.Review(context.Background(), testPR())
-	if err == nil || !strings.Contains(err.Error(), "invalid agent") {
+	if err == nil || strings.Contains(err.Error(), "invalid agent") == false {
 		t.Fatalf("Review() error = %v, want %q", err, "invalid agent")
 	}
 }
@@ -224,7 +245,7 @@ func TestAgentReviewMissingModel(t *testing.T) {
 		LlmClient: &fakeCompleter{},
 	}
 	err := agent.Review(context.Background(), testPR())
-	if err == nil || !strings.Contains(err.Error(), "unable to create completion request") {
+	if err == nil || strings.Contains(err.Error(), "unable to create completion request") == false {
 		t.Fatalf("Review() error = %v, want %q", err, "unable to create completion request")
 	}
 }
@@ -232,7 +253,7 @@ func TestAgentReviewMissingModel(t *testing.T) {
 func TestAgentReviewNilLlmClient(t *testing.T) {
 	agent := testAgent(nil)
 	err := agent.Review(context.Background(), testPR())
-	if err == nil || !strings.Contains(err.Error(), "invalid llm client") {
+	if err == nil || strings.Contains(err.Error(), "invalid llm client") == false {
 		t.Fatalf("Review() error = %v, want %q", err, "invalid llm client")
 	}
 }

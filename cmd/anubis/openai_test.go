@@ -27,7 +27,7 @@ func TestParseResponseObject(t *testing.T) {
 	if got := resp.TextContent(); got != "ok" {
 		t.Errorf("TextContent() = %q, want %q", got, "ok")
 	}
-	if !resp.Finished() {
+	if resp.Finished() == false {
 		t.Error("Finished() = false, want true")
 	}
 	if got := resp.FinishReason(); got != "stop" {
@@ -48,7 +48,7 @@ func TestParseResponseTrimsWhitespace(t *testing.T) {
 func TestParseResponseEmpty(t *testing.T) {
 	cases := [][]byte{nil, {}, []byte("   \n\t  ")}
 	for _, in := range cases {
-		if _, err := ParseResponse(in); err == nil || !strings.Contains(err.Error(), "empty response") {
+		if _, err := ParseResponse(in); err == nil || strings.Contains(err.Error(), "empty response") == false {
 			t.Errorf("ParseResponse(%q) error = %v, want %q", in, err, "empty response")
 		}
 	}
@@ -60,7 +60,7 @@ func TestParseResponseErrorField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseResponse() error = %v", err)
 	}
-	if !resp.HasError() {
+	if resp.HasError() == false {
 		t.Error("HasError() = false, want true")
 	}
 	if resp.TextContent() != "" {
@@ -130,7 +130,7 @@ func TestParseResponseArray(t *testing.T) {
 }
 
 func TestParseResponseEmptyArray(t *testing.T) {
-	if _, err := ParseResponse([]byte("[]")); err == nil || !strings.Contains(err.Error(), "empty array response") {
+	if _, err := ParseResponse([]byte("[]")); err == nil || strings.Contains(err.Error(), "empty array response") == false {
 		t.Errorf("ParseResponse([]) error = %v, want %q", err, "empty array response")
 	}
 }
@@ -138,7 +138,7 @@ func TestParseResponseEmptyArray(t *testing.T) {
 func TestParseResponseUnexpectedFormat(t *testing.T) {
 	cases := []string{"hello", "<html>", "42"}
 	for _, in := range cases {
-		if _, err := ParseResponse([]byte(in)); err == nil || !strings.Contains(err.Error(), "unexpected response format") {
+		if _, err := ParseResponse([]byte(in)); err == nil || strings.Contains(err.Error(), "unexpected response format") == false {
 			t.Errorf("ParseResponse(%q) error = %v, want %q", in, err, "unexpected response format")
 		}
 	}
@@ -151,7 +151,7 @@ func TestParseResponseInvalidJSON(t *testing.T) {
 			t.Errorf("ParseResponse(%q) error = nil, want JSON error", in)
 		} else {
 			var syntaxErr *json.SyntaxError
-			if !errors.As(err, &syntaxErr) {
+			if errors.As(err, &syntaxErr) == false {
 				t.Errorf("ParseResponse(%q) error = %v, want json.SyntaxError", in, err)
 			}
 		}
@@ -200,7 +200,7 @@ func TestCompleteSuccess(t *testing.T) {
 	if resp.Content != "all good" {
 		t.Errorf("Content = %q, want %q", resp.Content, "all good")
 	}
-	if resp.FinishReason != "stop" || !resp.Completed() {
+	if resp.FinishReason != "stop" || resp.Completed() == false {
 		t.Errorf("expected finish_reason stop, got %q", resp.FinishReason)
 	}
 }
@@ -232,7 +232,7 @@ func TestCompleteAPIError(t *testing.T) {
 	client := NewOpenAIClient("test-key", srv.URL, "test-model")
 	client.HTTPClient = srv.Client()
 	_, err := client.Complete(context.Background(), &CompletionRequest{Model: "test-model"})
-	if err == nil || !strings.Contains(err.Error(), "boom") {
+	if err == nil || strings.Contains(err.Error(), "boom") == false {
 		t.Fatalf("Complete() error = %v, want it to contain %q", err, "boom")
 	}
 }
@@ -321,7 +321,7 @@ func TestCompleteSurfacesHTTPStatus(t *testing.T) {
 				t.Fatal("Complete() error = nil, want an error carrying the HTTP status")
 			}
 			for _, want := range tc.wantParts {
-				if !strings.Contains(err.Error(), want) {
+				if strings.Contains(err.Error(), want) == false {
 					t.Errorf("Complete() error = %v, want it to contain %q", err, want)
 				}
 			}
@@ -352,7 +352,7 @@ func TestCompleteRejectsTruncatedResponse(t *testing.T) {
 	if resp != nil {
 		t.Errorf("Complete() = %+v, want nil so the partial content cannot be published", resp)
 	}
-	if !strings.Contains(err.Error(), "length") {
+	if strings.Contains(err.Error(), "length") == false {
 		t.Errorf("Complete() error = %v, want it to name the finish reason", err)
 	}
 }
@@ -398,7 +398,7 @@ func TestSnippetTruncatesLongBodies(t *testing.T) {
 	if len(got) > 210 {
 		t.Errorf("len(snippet(...)) = %d, want it bounded near 200", len(got))
 	}
-	if !strings.HasSuffix(got, "...") {
+	if strings.HasSuffix(got, "...") == false {
 		t.Errorf("snippet(...) = %q, want a truncation marker", got)
 	}
 }

@@ -17,6 +17,14 @@ type Coordinator struct {
 	// MaxConcurrency caps how many specialists run at once. Zero means the
 	// coordinator picks the safe default (sequential); see concurrency().
 	MaxConcurrency int
+	// MasterPrompt overrides the built-in coordinator system prompt when a
+	// repository supplies master-agent.md. Empty means the embedded prompt.
+	MasterPrompt string
+	// AgentSource is set to the directory custom specialists were loaded from,
+	// or empty when the built-ins ran. CustomMaster reports whether the
+	// coordinator prompt was overridden. Both drive the published disclosure.
+	AgentSource    string
+	IsCustomMaster bool
 	// failures records specialist agents that did not return a finding during
 	// the last review, so the published comment can disclose partial coverage.
 	failures []AgentFailure
@@ -93,12 +101,9 @@ func (c *Coordinator) DiffTruncated() bool {
 // errNoFindings marks an agent that completed without producing any output.
 var errNoFindings = errors.New("the model returned an empty review")
 
-// maxConcurrentAgents bounds how many specialist reviewers run at once, so a
-// large agent set cannot fan out into an unbounded number of in-flight
-// provider requests. It is the ceiling used when the caller does not set
-// MaxConcurrency explicitly; see defaultMaxConcurrency for why the shipped
-// default is 1.
-const maxConcurrentAgents = 4
+// maxConcurrentAgents upper limit of number of concurrent sub-agents
+// set it via ANUBIS_MAX_CONCURRENCY
+const maxConcurrentAgents = 16
 
 // Review runs every specialist agent against the pull request, then asks the
 // coordinator model to validate, deduplicate and synthesize their findings.
@@ -155,7 +160,7 @@ func (c *Coordinator) Review(ctx context.Context) error {
 	)
 	slog.Debug("synthesis prompt prepared", "bytes", len(finalPrompt))
 
-	r := NewCompletionRequest(c.LlmClient.ModelName(), masterPrompt, finalPrompt)
+	r := NewCompletionRequest(c.LlmClient.ModelName(), c.masterSystemPrompt(), finalPrompt)
 	if r == nil {
 		err := errors.New("unable to create completion request: model is not set")
 		slog.Error("review failed", "error", err)
@@ -180,6 +185,15 @@ func (c *Coordinator) Review(ctx context.Context) error {
 	}
 	c.result.ReviewFindingText = resp.Content
 	return nil
+}
+
+// masterSystemPrompt returns the coordinator's system prompt: a repository's
+// override when one was loaded, otherwise the embedded master prompt.
+func (c *Coordinator) masterSystemPrompt() string {
+	if c != nil && c.MasterPrompt != "" {
+		return c.MasterPrompt
+	}
+	return masterPrompt
 }
 
 // allAgentsFailedError builds the error returned when no agent produced a

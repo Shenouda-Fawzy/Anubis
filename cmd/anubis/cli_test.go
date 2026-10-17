@@ -77,7 +77,7 @@ func TestDocumentedAPIKeyIsProviderAgnostic(t *testing.T) {
 	if llmAPIKeyEnvVar != name {
 		t.Errorf("llmAPIKeyEnvVar = %q, want %q", llmAPIKeyEnvVar, name)
 	}
-	if !strings.HasPrefix(llmAPIKeyEnvVar, "ANUBIS_") {
+	if strings.HasPrefix(llmAPIKeyEnvVar, "ANUBIS_") == false {
 		t.Errorf("credential variable %q is not prefixed ANUBIS_", llmAPIKeyEnvVar)
 	}
 	for _, banned := range []string{"OPEN", "GEMINI", "GROQ", "OPENROUTER", "ANTHROPIC", "DEEPSEEK", "MISTRAL", "XAI", "GOOGLE"} {
@@ -85,7 +85,7 @@ func TestDocumentedAPIKeyIsProviderAgnostic(t *testing.T) {
 			t.Errorf("credential variable %q names the provider %q", llmAPIKeyEnvVar, banned)
 		}
 	}
-	if !strings.Contains(longHelp(), "ANUBIS_LLM_API_KEY") {
+	if strings.Contains(longHelp(), "ANUBIS_LLM_API_KEY") == false {
 		t.Error("help text does not document ANUBIS_LLM_API_KEY")
 	}
 }
@@ -101,10 +101,10 @@ func clearKeys(t *testing.T, keys ...string) {
 
 func TestFailureCommentIsNotACleanReview(t *testing.T) {
 	got := failureComment(errBoom)
-	if !strings.Contains(got, "not") || !strings.Contains(got, "clean review") {
+	if strings.Contains(got, "not") == false || strings.Contains(got, "clean review") == false {
 		t.Errorf("failure comment must make clear the review did not pass:\n%s", got)
 	}
-	if !strings.Contains(got, errBoom.Error()) {
+	if strings.Contains(got, errBoom.Error()) == false {
 		t.Errorf("failure comment must include the error, got %q", got)
 	}
 }
@@ -113,16 +113,13 @@ func TestLongHelpMatchesDocumentedFlags(t *testing.T) {
 	help := longHelp()
 	for _, want := range []string{
 		"-repo", "-pr", "-model", "-llm-base-url", "-github-base-url", "-github-token",
-		"-publish", "-log-level", "ANUBIS_LLM_API_KEY", defaultModel, defaultLLMBaseURL,
+		"-publish", "-log-level", "-agents", "-allowed-target-branch", "ANUBIS_LLM_API_KEY", "ANUBIS_AGENTS",
+		"ANUBIS_ALLOWED_TARGET_BRANCH",
+		defaultModel, defaultLLMBaseURL,
 	} {
-		if !strings.Contains(help, want) {
+		if strings.Contains(help, want) == false {
 			t.Errorf("help text is missing %q", want)
 		}
-	}
-	// The Markdown-agents feature was removed from the initial release; the help
-	// text must not keep advertising it.
-	if strings.Contains(help, "-agents") {
-		t.Error("help text still advertises the removed -agents flag")
 	}
 }
 
@@ -132,6 +129,14 @@ func TestDefaultAgents(t *testing.T) {
 
 	if len(as) == 0 {
 		t.Fatal("defaultAgents() returned no agents")
+	}
+	// Each built-in agent must carry its own embedded specialist prompt, not
+	// fall back to the generic one. These are the files a maintainer edits.
+	wantPrompt := map[string]string{
+		"security":        securityAgentPrompt,
+		"correctness":     correctnessAgentPrompt,
+		"performance":     performanceAgentPrompt,
+		"maintainability": maintainabilityAgentPrompt,
 	}
 	seen := map[string]bool{}
 	for _, a := range as {
@@ -151,8 +156,22 @@ func TestDefaultAgents(t *testing.T) {
 		if a.LlmClient != llm {
 			t.Errorf("agent %q is not wired to the shared client", a.Name)
 		}
+		if a.SystemPrompt == "" {
+			t.Errorf("agent %q has no system prompt", a.Name)
+		}
+		if want, ok := wantPrompt[a.Name]; ok && a.SystemPrompt != want {
+			t.Errorf("agent %q does not use its embedded specialist prompt", a.Name)
+		}
+		if a.SystemPrompt == subAgentPrompt {
+			t.Errorf("agent %q fell back to the generic specialist prompt", a.Name)
+		}
 		if len(as) > maxConcurrentAgents {
 			t.Errorf("built-in agent count %d exceeds the concurrency limit %d", len(as), maxConcurrentAgents)
+		}
+	}
+	for name := range wantPrompt {
+		if seen[name] == false {
+			t.Errorf("defaultAgents() is missing the %q specialist", name)
 		}
 	}
 }
@@ -199,10 +218,10 @@ func TestMaxConcurrencyFromEnv(t *testing.T) {
 // with the code.
 func TestLongHelpDocumentsMaxConcurrency(t *testing.T) {
 	help := longHelp()
-	if !strings.Contains(help, "ANUBIS_MAX_CONCURRENCY") {
+	if strings.Contains(help, "ANUBIS_MAX_CONCURRENCY") == false {
 		t.Error("longHelp() does not document ANUBIS_MAX_CONCURRENCY")
 	}
-	if !strings.Contains(help, "default 1") {
+	if strings.Contains(help, "default 1") == false {
 		t.Error("longHelp() does not state the default of 1")
 	}
 }

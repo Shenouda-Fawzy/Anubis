@@ -47,5 +47,5 @@ For every candidate finding:
 7. Correct the severity when necessary.
 8. Keep only actionable findings that are relevant to this pull request.
 
-Then return the final findings using the required output schema.
+Then return the final review as Markdown, ready to post as the pull request comment.
 `
