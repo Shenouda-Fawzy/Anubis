@@ -113,7 +113,8 @@ func TestLongHelpMatchesDocumentedFlags(t *testing.T) {
 	help := longHelp()
 	for _, want := range []string{
 		"-repo", "-pr", "-model", "-llm-base-url", "-github-base-url", "-github-token",
-		"-publish", "-log-level", "-agents", "ANUBIS_LLM_API_KEY", "ANUBIS_AGENTS",
+		"-publish", "-log-level", "-agents", "-allowed-target-branch", "ANUBIS_LLM_API_KEY", "ANUBIS_AGENTS",
+		"ANUBIS_ALLOWED_TARGET_BRANCH",
 		defaultModel, defaultLLMBaseURL,
 	} {
 		if !strings.Contains(help, want) {

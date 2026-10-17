@@ -52,9 +52,13 @@ inputs:
     required: false
     default: '1'
   anubis-agents:
-    description: 'Load review agents from .anubis-agents/ at the repository root on the default branch. When the directory has at least one valid *.md file it replaces the built-in specialists; a master-agent.md there overrides the coordinator. Never read from the pull-request head.'
+    description: 'Load review agents from .anubis-agents/ at the repository root on the branch the pull request proposes, read from whatever repository that branch lives in (a fork included). When the directory has at least one valid *.md file it replaces the built-in specialists; a master-agent.md there overrides the coordinator. This is a hard requirement: if the agents cannot be loaded, the run fails rather than falling back to the built-ins. Use anubis-allowed-target-branch to restrict this to pull requests targeting one branch.'
     required: false
     default: 'false'
+  anubis-allowed-target-branch:
+    description: 'Load .anubis-agents/ only for pull requests that target this branch, i.e. the branch they merge into (main, development, staging ...). Empty allows any target branch. A pull request targeting another branch fails the run. Ignored unless anubis-agents is true.'
+    required: false
+    default: ''
 
 runs:
   using: 'docker'
@@ -74,6 +78,7 @@ runs:
     ANUBIS_LOG_LEVEL: ${{ inputs.anubis-log-level }}
     ANUBIS_MAX_CONCURRENCY: ${{ inputs.anubis-max-concurrency }}
     ANUBIS_AGENTS: ${{ inputs.anubis-agents }}
+    ANUBIS_ALLOWED_TARGET_BRANCH: ${{ inputs.anubis-allowed-target-branch }}
     ANUBIS_LLM_API_KEY: ${{ inputs.anubis-llm-api-key }}
   args:
     # -pr and -publish have no environment fallback; everything else is passed

@@ -108,6 +108,69 @@ func TestEnterpriseDiffPathKeepsPrefix(t *testing.T) {
 	}
 }
 
+// The head branch and head repository are what the custom-agent loader gates
+// on, and the base branch is what allowed_target_branch matches, so all three
+// must survive parsing. The null head repo is the deleted-fork case: it must
+// come back empty rather than panic the getter chain.
+func TestGetPullRequestReadsHeadBranchAndRepo(t *testing.T) {
+	cases := []struct {
+		name     string
+		body     string
+		wantRef  string
+		wantRepo string
+		wantBase string
+	}{
+		{
+			name:     "same repository",
+			body:     `{"number":1,"head":{"ref":"feature/agents","repo":{"full_name":"octo/repo"}},"base":{"ref":"main"}}`,
+			wantRef:  "feature/agents",
+			wantRepo: "octo/repo",
+			wantBase: "main",
+		},
+		{
+			name:     "fork into development",
+			body:     `{"number":1,"head":{"ref":"patch-1","repo":{"full_name":"someone/repo"}},"base":{"ref":"development"}}`,
+			wantRef:  "patch-1",
+			wantRepo: "someone/repo",
+			wantBase: "development",
+		},
+		{
+			name:     "deleted fork",
+			body:     `{"number":1,"head":{"ref":"patch-1","repo":null},"base":{"ref":"main"}}`,
+			wantRef:  "patch-1",
+			wantRepo: "",
+			wantBase: "main",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+
+			c, err := NewGithubClient("test-token", srv.URL)
+			if err != nil {
+				t.Fatalf("NewGithubClient() error = %v", err)
+			}
+			pr, err := c.GetPullRequest(context.Background(), "octo", "repo", 1)
+			if err != nil {
+				t.Fatalf("GetPullRequest() error = %v", err)
+			}
+			if pr.SourceBranch != tc.wantRef {
+				t.Errorf("SourceBranch = %q, want %q", pr.SourceBranch, tc.wantRef)
+			}
+			if pr.Repository != tc.wantRepo {
+				t.Errorf("Repository = %q, want %q", pr.Repository, tc.wantRepo)
+			}
+			if pr.TargetBranch != tc.wantBase {
+				t.Errorf("TargetBranch = %q, want %q", pr.TargetBranch, tc.wantBase)
+			}
+		})
+	}
+}
+
 // A base URL that ends in a slash must not produce a doubled path segment.
 func TestTrailingSlashDoesNotDoubleThePath(t *testing.T) {
 	var gotPath string

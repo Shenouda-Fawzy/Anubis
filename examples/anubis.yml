@@ -67,11 +67,22 @@ jobs:
           # Control whether sub-agents runs concurrently, max=16.
           anubis-max-concurrency: '1'
 
-          # Load reviewers from .anubis-agents/ at the repository root on the
-          # default branch. When it has at least one valid *.md it replaces the
-          # built-in specialists; a master-agent.md there overrides the
-          # coordinator. Off by default. See docs/behavior.md#custom-agents.
+          # When true, it loads your custom agent defined agents (*.md)
+          # from .anubis-agents/ which has to be on your root. Your custom
+          # agents will then override the built-in agents. One special 
+          # file name 'master-agent.md' for overriding the coordinator.
+          # The directory is read from the pull request's head branch, in
+          # whatever repo that branch lives in -- a fork included, so a fork
+          # author can supply their own reviewers. Leave this off if that
+          # matters to you. This is a hard requirement: if the agents cannot
+          # be loaded, the run fails instead of falling back to the built-ins.
           anubis-agents: 'false'
+
+          # Load .anubis-agents/ only for pull requests that target this branch
+          # (the base branch: main, development, staging ...). Leave it empty to
+          # allow any target branch; a PR targeting another branch fails the run.
+          # Only effective when you enabled anubis-agents.
+          anubis-allowed-target-branch: ''
 
           # allowed options [info, debug, warning, error]
           anubis-log-level: info

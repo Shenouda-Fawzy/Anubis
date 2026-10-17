@@ -304,6 +304,27 @@ func TestCaveatsAreEmptyOnACleanReview(t *testing.T) {
 	}
 }
 
+// A run that used the repository's own specialists, or its own coordinator,
+// must say so, otherwise a reader cannot tell whose instructions produced the
+// findings.
+func TestCaveatsDiscloseCustomAgents(t *testing.T) {
+	llm := &fakeCompleter{result: &CompletionResponse{Content: "clean", FinishReason: "stop"}}
+	c := NewCoordinator(testAgents(llm), "acme/widgets", llm)
+	c.SetPRdetails(&PullRequest{Number: 1}, "diff")
+	c.AgentSource = agentsDir
+	c.IsCustomMaster = true
+	if err := c.Review(context.Background()); err != nil {
+		t.Fatalf("Review() error = %v", err)
+	}
+	got := caveats(c)
+	if !strings.Contains(got, agentsDir) {
+		t.Errorf("caveats = %q, want a disclosure naming %s", got, agentsDir)
+	}
+	if !strings.Contains(got, masterAgentFile) {
+		t.Errorf("caveats = %q, want a custom-coordinator disclosure naming %s", got, masterAgentFile)
+	}
+}
+
 func TestCaveatsDiscloseTruncatedDiff(t *testing.T) {
 	llm := &fakeCompleter{result: &CompletionResponse{Content: "clean", FinishReason: "stop"}}
 	c := NewCoordinator(testAgents(llm), "acme/widgets", llm)

@@ -32,7 +32,7 @@ Everything lives in `package main` under `cmd/anubis`. There is no `pkg/` tree.
 | `completion.go` | Request/response wire types shared by agents and the coordinator |
 | `subagent_new.go` | `Agent`, the `ChatCompleter` interface, per-agent review |
 | `subagentprompt.go` | Generic specialist system prompt (fallback) and the per-agent task renderer |
-| `agents.go` | Optional `.anubis-agents` loader: front-matter parser, trusted-ref fetch, custom specialist/coordinator selection |
+| `agents.go` | Optional `.anubis-agents` loader: front-matter parser, head-branch fetch, head-repo/target-branch gating, custom specialist/coordinator selection |
 | `coordinator.go` | Concurrent agent fan-out, synthesis call, result state |
 | `prompts.go` | `go:embed` of `specialist/*.md`, the specialist and coordinator system prompts |
 | `specialist/*.md` | The review prompts themselves, one file per agent plus the coordinator |
@@ -54,9 +54,10 @@ a PR comment.
   change `cli.go`, `action.yml`, `docs/configuration.md`, the help text and
   `TestLLMAPIKeyReadsDocumentedVariable` together.
 - **Every variable and input Anubis owns is prefixed: `ANUBIS_` in the
-  environment, `anubis-` in `action.yml`.** The six Anubis-owned inputs are
+  environment, `anubis-` in `action.yml`.** The seven Anubis-owned inputs are
   `anubis-llm-api-key`, `anubis-llm-base-url`, `anubis-llm-model`,
-  `anubis-log-level`, `anubis-max-concurrency` and `anubis-agents`. Nothing in
+  `anubis-log-level`, `anubis-max-concurrency`, `anubis-agents` and
+  `anubis-allowed-target-branch`. Nothing in
   the codebase may
   name a model provider in a variable, flag or input: one protocol, many
   providers, and the credential is the provider's key whoever serves it. The
@@ -117,19 +118,36 @@ a PR comment.
   `master-agent.md` for the coordinator. `go:embed` cannot reach outside the
   package directory, so the files must stay under `cmd/anubis/`. Editing a prompt
   changes every review for every user.
-- **Custom agents are read at run time from `.anubis-agents/` on the default
-  branch, and only the default branch.** `anubis-agents` (default `false`) turns
-  it on; `agents.go` lists and fetches the directory over the Contents API, so
-  there is no checkout and the container stays off the workspace. A directory
-  with at least one valid `*.md` **replaces** the built-in specialists; a file
-  named exactly `master-agent.md` overrides the coordinator and is never a
-  specialist. The body is the agent's system prompt (front-matter is stripped);
-  `name` defaults to the filename, `description` to a generic focus, `model` to
-  `ANUBIS_LLM_MODEL`. Bounds: 16 files, 64 KiB each. Every failure falls back to
-  the built-ins with a warning, and the published comment discloses when custom
-  specialists or a custom coordinator were used. Reading from the PR head would
-  let a contributor rewrite the instructions that review their own change — do
-  not do it.
+- **Custom agents are read at run time from `.anubis-agents/` on the pull
+  request's head branch, in whatever repository that branch lives in.** A fork
+  is allowed, so `PullRequest.Repository` is the fork for
+  a fork pull request and the repository under review otherwise, and the loader
+  reads from that repository. `anubis-agents` (default `false`) turns it on;
+  `agents.go` lists and fetches the directory over the Contents API, so there is
+  no checkout and the container stays off the workspace. The ref is the PR head
+  branch (`PullRequest.SourceBranch`), not the default branch, so a feature branch
+  can try its own reviewers without merging first — that is deliberate. Allowing
+  a fork means an outside contributor can write the instructions that review
+  their own change; that was a deliberate relaxation, and the only remaining
+  restriction is the target branch. `ensureTargetAllowed` refuses an unknown or
+  malformed head repository (a deleted fork) and a pull request with no head
+  branch, before any contents request. A directory with at least one valid
+  `*.md` **replaces** the built-in specialists; a file named exactly
+  `master-agent.md` overrides the coordinator and is never a specialist. The body
+  is the agent's system prompt (front-matter is stripped); `name` defaults to the
+  filename, `description` to a generic focus, `model` to `ANUBIS_LLM_MODEL`.
+  Bounds: 16 files, 64 KiB each. `anubis-allowed-target-branch` (env
+  `ANUBIS_ALLOWED_TARGET_BRANCH`, flag `-allowed-target-branch`) optionally
+  restricts the load to pull requests that **target** one branch (their base
+  branch: `PullRequest.TargetBranch`), matched by exact name; empty allows any
+  target branch. The head branch is never part of that comparison: agents are read
+  from the head, the filter is on the target. **A requested custom set is a hard
+  requirement.** With `anubis-agents` on, every refusal — a target-branch
+  mismatch, a missing directory, no valid specialist, or an API error — is a hard
+  failure (`fatal`, exit 2): the run must never fall back to the built-ins, because
+  a review published that way reads as the repository's own reviewers when it is
+  not. `loadCustomAgentsGroup` returns those errors; the comment discloses when
+  custom specialists or a custom coordinator were used.
 - `go.mod` requires the 1.26.x toolchain.
 
 ## GitHub Action packaging

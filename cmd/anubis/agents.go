@@ -35,18 +35,16 @@ func loadCustomAgentsGroup(ctx context.Context, gh *Client, defaultModel string,
 		return nil, errors.New("GH client not init")
 	}
 	if err := ensureTargetAllowed(pr, allowedTargetBranch); err != nil {
-		slog.Error("PR target branch mismatch with the allowed target branch", "reason", err.Error())
-		slog.Info("Ensure your target branch is allowed in anubis-allowed-target-branch in anubis.yml ")
 		return nil, err
 	}
 
 	// Read from the repository that holds the head branch, which is the fork
-	// for a pull request from a fork. agentGate has checked owner/name form.
+	// for a pull request from a fork. ensureTargetAllowed has checked that
+	// Repository is in owner/name form.
 	owner, repo, _ := strings.Cut(pr.Repository, "/")
 	return loadAgentGroup(ctx, gh, owner, repo, pr.SourceBranch, defaultModel)
 }
 
-// ensure target branch is allowed, empty target means allow all
 func ensureTargetAllowed(pr PullRequest, allowedTargetBranch string) error {
 	if pr.Repository == "" {
 		return errors.New("pull request head repository is unknown")
@@ -60,7 +58,7 @@ func ensureTargetAllowed(pr PullRequest, allowedTargetBranch string) error {
 
 	// Target branch is set, ensure it matches PR's target branch
 	if allowedTargetBranch != "" && allowedTargetBranch != pr.TargetBranch {
-		return fmt.Errorf("target branch %q is not the allowed target branch %q", pr.TargetBranch, allowedTargetBranch)
+		return fmt.Errorf("the pull request targets %q, but only %q is allowed by anubis-allowed-target-branch", pr.TargetBranch, allowedTargetBranch)
 	}
 	return nil
 }

@@ -82,7 +82,27 @@ const e2ePRJSON = `{
   "title": "Add /api/v1/users endpoint",
   "body": "Introduces a public users endpoint and a query merge fix.",
   "html_url": "https://github.com/acme/widgets/pull/1",
-  "state": "open"
+  "state": "open",
+  "head": {
+    "ref": "feature/endpoint",
+    "repo": {"full_name": "acme/widgets"}
+  },
+  "base": {"ref": "development"}
+}`
+
+// e2eForkPRJSON is e2ePRJSON from a fork: the head branch lives in
+// external/widgets, so the custom agents must be read from there.
+const e2eForkPRJSON = `{
+  "number": 1,
+  "title": "Add /api/v1/users endpoint",
+  "body": "Introduces a public users endpoint and a query merge fix.",
+  "html_url": "https://github.com/acme/widgets/pull/1",
+  "state": "open",
+  "head": {
+    "ref": "feature/endpoint",
+    "repo": {"full_name": "external/widgets"}
+  },
+  "base": {"ref": "development"}
 }`
 
 const e2eDiff = `diff --git a/src/server.go b/src/server.go
@@ -120,7 +140,8 @@ const e2eFinalReview = "### [warning] Parameterize the SQL query in handleUsers\
 // mockGitHub reproduces the handful of REST endpoints the CLI touches:
 // GET repos/{owner}/{repo}/pulls/{n} (JSON, or raw diff by Accept header),
 // POST repos/{owner}/{repo}/issues/{n}/comments, and — when the custom-agent
-// test is running — the default branch and .anubis-agents contents.
+// test is running — the .anubis-agents contents on the pull request's head
+// branch.
 type mockGitHub struct {
 	mu           sync.Mutex
 	prRequests   int
@@ -129,6 +150,12 @@ type mockGitHub struct {
 	// agentFiles backs the .anubis-agents contents endpoints. Empty means the
 	// directory is not served; add a helper or set it directly in a test.
 	agentFiles map[string]string
+	// prJSON overrides the pull request JSON served for GET pulls/{n}. Empty
+	// serves e2ePRJSON; set it to model a fork or another base branch.
+	prJSON string
+	// contentsRepos records the owner/name of every .anubis-agents contents
+	// request, so a test can prove which repository was read.
+	contentsRepos []string
 }
 
 // setAgentFiles installs the agents directory served to a run. It takes the
@@ -139,21 +166,26 @@ func (m *mockGitHub) setAgentFiles(files map[string]string) {
 	m.mu.Unlock()
 }
 
+// setPRJSON overrides the pull request JSON served to a run.
+func (m *mockGitHub) setPRJSON(body string) {
+	m.mu.Lock()
+	m.prJSON = body
+	m.mu.Unlock()
+}
+
 func (m *mockGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	m.mu.Lock()
 	agentFiles := m.agentFiles
+	prJSON := m.prJSON
 	m.mu.Unlock()
 
 	switch {
-	case len(parts) == 3 && parts[0] == "repos" && r.Method == http.MethodGet:
-		// GET repos/{owner}/{repo}: the default branch agents are read from.
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"default_branch":"main"}`)
-		return
-
 	case len(parts) == 5 && parts[0] == "repos" && parts[3] == "contents" && r.Method == http.MethodGet:
 		// Directory listing for .anubis-agents.
+		m.mu.Lock()
+		m.contentsRepos = append(m.contentsRepos, parts[1]+"/"+parts[2])
+		m.mu.Unlock()
 		if agentFiles == nil {
 			http.NotFound(w, r)
 			return
@@ -202,7 +234,10 @@ func (m *mockGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		m.prRequests++
 		m.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, e2ePRJSON)
+		if prJSON == "" {
+			prJSON = e2ePRJSON
+		}
+		_, _ = io.WriteString(w, prJSON)
 		return
 
 	case len(parts) == 6 && parts[0] == "repos" && parts[3] == "issues" &&
@@ -239,6 +274,12 @@ func (m *mockGitHub) commentBodies() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return append([]string(nil), m.comments...)
+}
+
+func (m *mockGitHub) contentsRepositories() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]string(nil), m.contentsRepos...)
 }
 
 // mockLLM serves /chat/completions and routes the response based on the user
@@ -430,9 +471,9 @@ func TestE2EFullReviewPublishesComment(t *testing.T) {
 }
 
 // TestE2ECustomAgents drives the -agents path end to end: the agent set is
-// loaded from .anubis-agents on the default branch, replaces the built-ins, and
-// master-agent.md overrides the coordinator. The published comment discloses
-// both so a reader knows the built-in pipeline was replaced.
+// loaded from .anubis-agents on the pull request's head branch, replaces the
+// built-ins, and master-agent.md overrides the coordinator. The published
+// comment discloses both so a reader knows the built-in pipeline was replaced.
 func TestE2ECustomAgents(t *testing.T) {
 	h, ghURL, llmURL := newE2EHarness(t)
 	h.github.setAgentFiles(map[string]string{
@@ -473,6 +514,185 @@ func TestE2ECustomAgents(t *testing.T) {
 		if !strings.Contains(comments[0], want) {
 			t.Errorf("comment does not mention %q:\n%s", want, comments[0])
 		}
+	}
+}
+
+// TestE2ECustomAgentsRestrictedToTargetBranch drives -allowed-target-branch:
+// the pull request targets development, so an allowed branch of release is
+// refused. Because anubis-agents was requested, the run fails instead of
+// silently falling back to the built-ins, and nothing is reviewed or published.
+func TestE2ECustomAgentsRestrictedToTargetBranch(t *testing.T) {
+	h, ghURL, llmURL := newE2EHarness(t)
+	h.github.setAgentFiles(map[string]string{e2eCustomAgentName: e2eCustomAgentBody})
+
+	out, code := runAnubis(
+		t,
+		"-repo", e2eOwner+"/"+e2eRepo,
+		"-pr", "1",
+		"-github-base-url", ghURL,
+		"-llm-base-url", llmURL,
+		"-model", "e2e-model",
+		"-publish",
+		"-agents",
+		"-allowed-target-branch", "release",
+	)
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2 (fail, no fallback)\noutput:\n%s", code, out)
+	}
+
+	// The refusal happens before any review runs, so no agent or synthesis call
+	// reaches the model and no comment is posted under the built-ins' name.
+	if got := h.llm.agentCallsCount(); got != 0 {
+		t.Errorf("LLM agent calls = %d, want 0 on a refused custom-agent run", got)
+	}
+	if got := h.llm.synthesisCallsCount(); got != 0 {
+		t.Errorf("LLM synthesis calls = %d, want 0 on a refused custom-agent run", got)
+	}
+	if got := len(h.github.commentBodies()); got != 0 {
+		t.Errorf("comments posted = %d, want 0 on a refused custom-agent run", got)
+	}
+	if !strings.Contains(out, "allowed") {
+		t.Errorf("output does not explain the target-branch refusal:\n%s", out)
+	}
+}
+
+// TestE2ECustomAgentsMissingDirectoryFails proves anubis-agents is a hard
+// requirement: when the repository has no .anubis-agents/ directory the run
+// fails rather than quietly reviewing with the built-ins.
+func TestE2ECustomAgentsMissingDirectoryFails(t *testing.T) {
+	h, ghURL, llmURL := newE2EHarness(t)
+	// No setAgentFiles call: the contents endpoint answers 404, i.e. a missing
+	// directory.
+
+	out, code := runAnubis(
+		t,
+		"-repo", e2eOwner+"/"+e2eRepo,
+		"-pr", "1",
+		"-github-base-url", ghURL,
+		"-llm-base-url", llmURL,
+		"-model", "e2e-model",
+		"-publish",
+		"-agents",
+	)
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2 (no .anubis-agents, no fallback)\noutput:\n%s", code, out)
+	}
+	if got := h.llm.agentCallsCount(); got != 0 {
+		t.Errorf("LLM agent calls = %d, want 0 when no custom agents exist", got)
+	}
+	if got := len(h.github.commentBodies()); got != 0 {
+		t.Errorf("comments posted = %d, want 0 when no custom agents exist", got)
+	}
+	if !strings.Contains(out, agentsDir) {
+		t.Errorf("output does not mention %s:\n%s", agentsDir, out)
+	}
+}
+
+// TestE2ECustomAgentsMasterOnlyFails covers a directory that holds only
+// master-agent.md. That leaves no custom specialist, so the built-in
+// specialists would run; because custom agents were requested, the run fails
+// rather than mix a custom coordinator with built-in reviewers.
+func TestE2ECustomAgentsMasterOnlyFails(t *testing.T) {
+	h, ghURL, llmURL := newE2EHarness(t)
+	h.github.setAgentFiles(map[string]string{e2eCustomMasterName: e2eCustomMasterBody})
+
+	out, code := runAnubis(
+		t,
+		"-repo", e2eOwner+"/"+e2eRepo,
+		"-pr", "1",
+		"-github-base-url", ghURL,
+		"-llm-base-url", llmURL,
+		"-model", "e2e-model",
+		"-publish",
+		"-agents",
+	)
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2 (no custom specialist, no fallback)\noutput:\n%s", code, out)
+	}
+	if got := h.llm.agentCallsCount(); got != 0 {
+		t.Errorf("LLM agent calls = %d, want 0 when only a coordinator is defined", got)
+	}
+	if got := len(h.github.commentBodies()); got != 0 {
+		t.Errorf("comments posted = %d, want 0 when only a coordinator is defined", got)
+	}
+}
+
+// TestE2ECustomAgentsAllowedForTargetBranch proves the match is on the target,
+// not the head: the pull request's head is feature/endpoint, but it targets
+// development, so -allowed-target-branch development loads the custom set.
+func TestE2ECustomAgentsAllowedForTargetBranch(t *testing.T) {
+	h, ghURL, llmURL := newE2EHarness(t)
+	h.github.setAgentFiles(map[string]string{e2eCustomAgentName: e2eCustomAgentBody})
+
+	out, code := runAnubis(
+		t,
+		"-repo", e2eOwner+"/"+e2eRepo,
+		"-pr", "1",
+		"-github-base-url", ghURL,
+		"-llm-base-url", llmURL,
+		"-model", "e2e-model",
+		"-publish",
+		"-agents",
+		"-allowed-target-branch", "development",
+	)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0\noutput:\n%s", code, out)
+	}
+
+	// Only the single custom specialist runs; the four built-ins are replaced.
+	if got := h.llm.agentCallsCount(); got != 1 {
+		t.Errorf("LLM agent calls = %d, want 1 (custom specialist only)", got)
+	}
+	comments := h.github.commentBodies()
+	if len(comments) != 1 {
+		t.Fatalf("comments posted = %d, want 1", len(comments))
+	}
+	if !strings.Contains(comments[0], agentsDir+"/") {
+		t.Errorf("comment does not disclose the custom agents:\n%s", comments[0])
+	}
+}
+
+// TestE2ECustomAgentsFromFork drives -agents on a pull request whose head
+// branch lives in a fork: the custom agents load, and they are read from the
+// fork repository (external/widgets), not the repository under review.
+func TestE2ECustomAgentsFromFork(t *testing.T) {
+	h, ghURL, llmURL := newE2EHarness(t)
+	h.github.setAgentFiles(map[string]string{e2eCustomAgentName: e2eCustomAgentBody})
+	h.github.setPRJSON(e2eForkPRJSON)
+
+	out, code := runAnubis(
+		t,
+		"-repo", e2eOwner+"/"+e2eRepo,
+		"-pr", "1",
+		"-github-base-url", ghURL,
+		"-llm-base-url", llmURL,
+		"-model", "e2e-model",
+		"-publish",
+		"-agents",
+	)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0\noutput:\n%s", code, out)
+	}
+
+	// The fork's single custom specialist runs; the built-ins are replaced.
+	if got := h.llm.agentCallsCount(); got != 1 {
+		t.Errorf("LLM agent calls = %d, want 1 (custom specialist only)", got)
+	}
+	repos := h.github.contentsRepositories()
+	if len(repos) == 0 {
+		t.Fatal("no .anubis-agents contents request was made")
+	}
+	for _, r := range repos {
+		if r != "external/widgets" {
+			t.Errorf("contents read from %q, want the fork external/widgets; repos = %v", r, repos)
+		}
+	}
+	comments := h.github.commentBodies()
+	if len(comments) != 1 {
+		t.Fatalf("comments posted = %d, want 1", len(comments))
+	}
+	if !strings.Contains(comments[0], agentsDir+"/") {
+		t.Errorf("comment does not disclose the custom agents:\n%s", comments[0])
 	}
 }
 

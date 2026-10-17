@@ -132,32 +132,40 @@ const (
 	agentTestRepo  = "widgets"
 )
 
+// agentTestPR builds the common case: a pull request from a branch of the
+// repository under test, with no target-branch restriction.
+func agentTestPR(branch string) PullRequest {
+	return PullRequest{SourceBranch: branch, Repository: agentTestOwner + "/" + agentTestRepo}
+}
+
 type agentMockGitHub struct {
-	mu            sync.Mutex
-	defaultBranch string
-	listing       []map[string]any
-	files         map[string]string
-	dirStatus     int
-	refs          []string
+	mu        sync.Mutex
+	listing   []map[string]any
+	files     map[string]string
+	dirStatus int
+	refs      []string
+	paths     []string
 }
 
 func (m *agentMockGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	m.mu.Lock()
 	m.refs = append(m.refs, r.URL.Query().Get("ref"))
+	m.paths = append(m.paths, r.URL.Path)
 	m.mu.Unlock()
 
-	dirPath := "/repos/" + agentTestOwner + "/" + agentTestRepo + "/contents/" + agentsDir
+	// The .anubis-agents contents endpoints are served for any owner/name, so a
+	// fork repository is served too; tests assert which repository the loader
+	// actually asked, via requestedPaths.
+	contents := "/contents/" + agentsDir
 	switch {
-	case r.URL.Path == "/repos/"+agentTestOwner+"/"+agentTestRepo:
-		writeTestJSON(w, http.StatusOK, map[string]any{"default_branch": m.defaultBranch})
-	case r.URL.Path == dirPath:
+	case strings.HasSuffix(r.URL.Path, contents):
 		if m.dirStatus != 0 && m.dirStatus != http.StatusOK {
 			writeTestJSON(w, m.dirStatus, map[string]any{"message": "error"})
 			return
 		}
 		writeTestJSON(w, http.StatusOK, m.listing)
-	case strings.HasPrefix(r.URL.Path, dirPath+"/"):
-		name := strings.TrimPrefix(r.URL.Path, dirPath+"/")
+	case strings.Contains(r.URL.Path, contents+"/"):
+		name := r.URL.Path[strings.Index(r.URL.Path, contents)+len(contents)+1:]
 		content, ok := m.files[name]
 		if !ok {
 			writeTestJSON(w, http.StatusNotFound, map[string]any{"message": "Not Found"})
@@ -174,6 +182,13 @@ func (m *agentMockGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// requestedPaths returns a copy of the request paths the mock has served.
+func (m *agentMockGitHub) requestedPaths() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]string(nil), m.paths...)
 }
 
 func writeTestJSON(w http.ResponseWriter, status int, v any) {
@@ -207,7 +222,6 @@ func TestLoadAgentSetReadsSpecialistsAndMaster(t *testing.T) {
 	perf := "You are a performance reviewer.\n"
 	master := "---\nname: master-agent\n---\nYou are the custom coordinator.\n"
 	mock := &agentMockGitHub{
-		defaultBranch: "main",
 		listing: []map[string]any{
 			listingEntry("security.md", sec),
 			listingEntry(masterAgentFile, master),
@@ -222,7 +236,7 @@ func TestLoadAgentSetReadsSpecialistsAndMaster(t *testing.T) {
 	}
 	c := newAgentTestClient(t, mock)
 
-	set, err := loadCustomAgentGroup(t.Context(), c, agentTestOwner, agentTestRepo, "default-model")
+	set, err := loadCustomAgentsGroup(t.Context(), c, "default-model", agentTestPR("main"), "")
 	if err != nil {
 		t.Fatalf("loadCustomAgentSet() error = %v", err)
 	}
@@ -249,10 +263,10 @@ func TestLoadAgentSetReadsSpecialistsAndMaster(t *testing.T) {
 }
 
 func TestLoadAgentSetMissingDirectoryIsNotAnError(t *testing.T) {
-	mock := &agentMockGitHub{defaultBranch: "main", dirStatus: http.StatusNotFound}
+	mock := &agentMockGitHub{dirStatus: http.StatusNotFound}
 	c := newAgentTestClient(t, mock)
 
-	set, err := loadCustomAgentGroup(t.Context(), c, agentTestOwner, agentTestRepo, "m")
+	set, err := loadCustomAgentsGroup(t.Context(), c, "m", agentTestPR("main"), "")
 	if err != nil {
 		t.Fatalf("loadCustomAgentSet() error = %v, want nil for a missing directory", err)
 	}
@@ -262,10 +276,10 @@ func TestLoadAgentSetMissingDirectoryIsNotAnError(t *testing.T) {
 }
 
 func TestLoadAgentSetPropagatesAPIError(t *testing.T) {
-	mock := &agentMockGitHub{defaultBranch: "main", dirStatus: http.StatusInternalServerError}
+	mock := &agentMockGitHub{dirStatus: http.StatusInternalServerError}
 	c := newAgentTestClient(t, mock)
 
-	if _, err := loadCustomAgentGroup(t.Context(), c, agentTestOwner, agentTestRepo, "m"); err == nil {
+	if _, err := loadCustomAgentsGroup(t.Context(), c, "m", agentTestPR("main"), ""); err == nil {
 		t.Error("loadCustomAgentSet() error = nil, want the API error propagated")
 	}
 }
@@ -275,7 +289,6 @@ func TestLoadAgentSetSkipsInvalidAndOversize(t *testing.T) {
 	empty := "---\nname: empty\n---\n"
 	big := strings.Repeat("x", maxAgentFileBytes+1)
 	mock := &agentMockGitHub{
-		defaultBranch: "main",
 		listing: []map[string]any{
 			listingEntry("good.md", good),
 			listingEntry("empty.md", empty),
@@ -289,7 +302,7 @@ func TestLoadAgentSetSkipsInvalidAndOversize(t *testing.T) {
 	}
 	c := newAgentTestClient(t, mock)
 
-	set, err := loadCustomAgentGroup(t.Context(), c, agentTestOwner, agentTestRepo, "m")
+	set, err := loadCustomAgentsGroup(t.Context(), c, "m", agentTestPR("main"), "")
 	if err != nil {
 		t.Fatalf("loadCustomAgentSet() error = %v", err)
 	}
@@ -307,10 +320,10 @@ func TestLoadAgentSetCapsFileCount(t *testing.T) {
 		files[name] = body
 		listing = append(listing, listingEntry(name, body))
 	}
-	mock := &agentMockGitHub{defaultBranch: "main", listing: listing, files: files}
+	mock := &agentMockGitHub{listing: listing, files: files}
 	c := newAgentTestClient(t, mock)
 
-	set, err := loadCustomAgentGroup(t.Context(), c, agentTestOwner, agentTestRepo, "m")
+	set, err := loadCustomAgentsGroup(t.Context(), c, "m", agentTestPR("main"), "")
 	if err != nil {
 		t.Fatalf("loadCustomAgentSet() error = %v", err)
 	}
@@ -319,23 +332,151 @@ func TestLoadAgentSetCapsFileCount(t *testing.T) {
 	}
 }
 
-// Reading from the default branch, not the pull-request head, is the guard that
-// stops a contributor from rewriting the instructions that review their change.
-func TestLoadAgentSetUsesDefaultBranchRef(t *testing.T) {
-	mock := &agentMockGitHub{defaultBranch: "release", listing: []map[string]any{}}
+// Custom agents are read from the branch the pull request proposes, so a
+// feature branch can add and try its own reviewers without merging first.
+func TestLoadAgentSetReadsPullRequestHeadBranch(t *testing.T) {
+	mock := &agentMockGitHub{listing: []map[string]any{}}
 	c := newAgentTestClient(t, mock)
 
-	if _, err := loadCustomAgentGroup(t.Context(), c, agentTestOwner, agentTestRepo, "m"); err != nil {
-		t.Fatalf("loadCustomAgentSet() error = %v", err)
+	set, err := loadCustomAgentsGroup(t.Context(), c, "m", agentTestPR("feature/widgets"), "")
+	if err != nil {
+		t.Fatalf("loadCustomAgentGroup() error = %v", err)
+	}
+	if set.Ref != "feature/widgets" {
+		t.Errorf("Ref = %q, want the pull request head branch", set.Ref)
 	}
 	mock.mu.Lock()
 	defer mock.mu.Unlock()
+	if len(mock.refs) == 0 {
+		t.Fatal("no contents request was made")
+	}
 	for _, ref := range mock.refs {
-		if ref == "release" {
-			return
+		if ref != "feature/widgets" {
+			t.Errorf("request used ref %q, want the head branch only; refs = %v", ref, mock.refs)
 		}
 	}
-	t.Errorf("no request used the default branch ref; refs = %v", mock.refs)
+}
+
+// A pull request from a fork is allowed to supply its own reviewers: the
+// loader reads .anubis-agents/ from the fork repository that holds the head
+// branch, not from the repository under review.
+func TestLoadAgentSetReadsFromForkRepository(t *testing.T) {
+	const fork = "attacker/widgets"
+	body := "You are a reviewer.\n"
+	mock := &agentMockGitHub{
+		listing: []map[string]any{listingEntry("good.md", body)},
+		files:   map[string]string{"good.md": body},
+	}
+	c := newAgentTestClient(t, mock)
+
+	pr := agentTestPR("feature")
+	pr.Repository = fork
+	set, err := loadCustomAgentsGroup(t.Context(), c, "m", pr, "")
+	if err != nil {
+		t.Fatalf("loadCustomAgentsGroup() error = %v", err)
+	}
+	if len(set.Specialists) != 1 || set.Specialists[0].Name != "good" {
+		t.Fatalf("specialists = %+v, want one loaded from the fork", set.Specialists)
+	}
+	// The contents request went to the fork, not the repository under review.
+	var readFromFork bool
+	for _, p := range mock.requestedPaths() {
+		if strings.HasPrefix(p, "/repos/"+fork+"/contents/") {
+			readFromFork = true
+		}
+		if strings.HasPrefix(p, "/repos/"+agentTestOwner+"/"+agentTestRepo+"/contents/") {
+			t.Errorf("request read from the repository under review: %q", p)
+		}
+	}
+	if !readFromFork {
+		t.Errorf("no contents request to the fork; paths = %v", mock.requestedPaths())
+	}
+}
+
+// When GitHub does not report the head repository (for example a deleted
+// fork), there is nowhere to read .anubis-agents/ from. That is an error, not
+// a skip: a run that asked for custom agents must fail rather than quietly use
+// the built-ins.
+func TestLoadAgentSetUnknownHeadRepositoryErrors(t *testing.T) {
+	mock := &agentMockGitHub{listing: []map[string]any{}}
+	c := newAgentTestClient(t, mock)
+
+	set, err := loadCustomAgentsGroup(t.Context(), c, "m",
+		PullRequest{SourceBranch: "feature"}, "")
+	if err == nil {
+		t.Fatal("loadCustomAgentsGroup() error = nil, want an error for an unknown head repository")
+	}
+	if set != nil {
+		t.Errorf("group = %+v, want nil on a refused load", set)
+	}
+	if len(mock.requestedPaths()) != 0 {
+		t.Errorf("requested %v, want no contents request when the head repository is unknown", mock.requestedPaths())
+	}
+}
+
+// When GitHub does not report the head branch there is no ref to read the
+// agents from, so the load is refused rather than guessed.
+func TestLoadAgentSetNoHeadBranchErrors(t *testing.T) {
+	mock := &agentMockGitHub{listing: []map[string]any{}}
+	c := newAgentTestClient(t, mock)
+
+	set, err := loadCustomAgentsGroup(t.Context(), c, "m",
+		PullRequest{Repository: agentTestOwner + "/" + agentTestRepo}, "")
+	if err == nil {
+		t.Fatal("loadCustomAgentsGroup() error = nil, want an error for a missing head branch")
+	}
+	if set != nil {
+		t.Errorf("group = %+v, want nil on a refused load", set)
+	}
+}
+
+// allowed_target_branch restricts custom agents to pull requests that target
+// one branch. Unset means any target branch. A mismatch is an error, not a
+// silent fallback: a run that asked for custom agents must fail rather than use
+// the built-ins. The filter is on the target, not the head the agents are read
+// from, so "matching target loads" below has a head of feat/new-api and still
+// loads because it targets development.
+func TestLoadAgentSetAllowedTargetBranchGates(t *testing.T) {
+	tests := []struct {
+		name    string
+		target  string
+		allowed string
+		wantErr bool
+	}{
+		{name: "any target when unset", target: "development"},
+		{name: "matching target loads", target: "development", allowed: "development"},
+		{name: "other target is refused", target: "development", allowed: "main", wantErr: true},
+		{name: "empty target is refused", target: "", allowed: "main", wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			good := "You are a reviewer.\n"
+			mock := &agentMockGitHub{
+				listing: []map[string]any{listingEntry("good.md", good)},
+				files:   map[string]string{"good.md": good},
+			}
+			c := newAgentTestClient(t, mock)
+
+			pr := agentTestPR("feat/new-api")
+			pr.TargetBranch = tc.target
+			set, err := loadCustomAgentsGroup(t.Context(), c, "m", pr, tc.allowed)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("loadCustomAgentsGroup() error = nil, want a target-branch refusal")
+				}
+				if set != nil {
+					t.Errorf("group = %+v, want nil on a refused load", set)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("loadCustomAgentsGroup() error = %v", err)
+			}
+			if len(set.Specialists) != 1 {
+				t.Errorf("specialists = %d, want the custom set loaded", len(set.Specialists))
+			}
+		})
+	}
 }
 
 // --- selection ---
@@ -344,7 +485,7 @@ func TestSelectAgentsReplacesBuiltins(t *testing.T) {
 	llm := &OpenAIClient{Model: "m"}
 	custom := []*AgentCard{{Name: "docs", Description: "d", SystemPrompt: "p"}}
 
-	agents, replaced := selectAgents(custom, llm)
+	agents, replaced := extractAgents(custom, llm)
 	if !replaced {
 		t.Error("replaced = false, want true when custom agents exist")
 	}
@@ -359,13 +500,16 @@ func TestSelectAgentsReplacesBuiltins(t *testing.T) {
 	}
 }
 
-func TestSelectAgentsKeepsBuiltinsWhenNoCustom(t *testing.T) {
+// When the repository provided no custom agents, extractAgents reports false
+// and returns nothing, leaving the caller's built-in set in place. It never
+// invents specialists of its own.
+func TestExtractAgentsNoneWhenNoCustom(t *testing.T) {
 	llm := &OpenAIClient{Model: "m"}
-	agents, replaced := selectAgents(nil, llm)
+	agents, replaced := extractAgents(nil, llm)
 	if replaced {
 		t.Error("replaced = true, want false when there are no custom agents")
 	}
-	if len(agents) != len(defaultAgents(llm)) {
-		t.Errorf("agents = %d, want the built-in set", len(agents))
+	if agents != nil {
+		t.Errorf("agents = %+v, want nil so the caller keeps the built-ins", agents)
 	}
 }

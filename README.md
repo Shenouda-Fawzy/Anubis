@@ -53,6 +53,10 @@ root cause, and re-grades severity. The result is posted as a comment.
 A repository can replace the panel with its own reviewers: put `*.md` files in
 `.anubis-agents/` at the repo root (see
 [Custom agents](docs/behavior.md#custom-agents)) and set `anubis-agents: 'true'`.
+Agents load from the pull request's own branch, so they work on a feature branch
+before they are merged; set `anubis-allowed-target-branch` to restrict them to
+pull requests targeting one branch. It is a hard requirement — if the agents
+cannot be loaded, the run fails rather than fall back to the built-ins.
 
 ## Providers
 
@@ -100,6 +104,7 @@ provider.
 | Run the reviewers in parallel | `anubis-max-concurrency` |
 | Keep the review out of the PR | `publish: false` |
 | Define your own review agents | `anubis-agents: 'true'` + `.anubis-agents/*.md` |
+| Restrict custom agents to PRs targeting one branch | `anubis-allowed-target-branch: main` |
 | See more detail in the log | `anubis-log-level: debug` |
 
 Every input, flag and environment variable is in

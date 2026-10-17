@@ -115,12 +115,12 @@ func Review() {
 	if useCustomAgents {
 		agentsGrp, err := loadCustomAgentsGroup(ctx, ghb, llmClient.Model, pr, strings.TrimSpace(allowedTargetBranch))
 		if err != nil {
-			slog.Error("Couldn't load use defined agents in .anubis-agents", "error", err)
+			fatal("anubis-agents is enabled, but the custom agents could not be loaded: " + err.Error())
 			return
 		}
 		agents, extracted = extractAgents(agentsGrp.Specialists, llmClient)
 		if extracted == false {
-			slog.Error("Unable to use custom agents", "custom agents count", len(agentsGrp.Specialists))
+			fatal("anubis-agents is enabled, but no valid specialist agents were found in " + agentsDir)
 			return
 		}
 		masterOverride = agentsGrp.MasterPrompt
@@ -245,10 +245,12 @@ Flags:
         publish the review as a PR comment
   -agents
         load review agents from .anubis-agents on the branch the pull
-        request proposes (env ANUBIS_AGENTS)
+        request proposes; if they cannot be loaded the run fails rather
+        than fall back to the built-ins (env ANUBIS_AGENTS)
   -allowed-target-branch string
         load .anubis-agents only for pull requests targeting this branch
-        (the base branch); empty allows any target branch
+        (the base branch); empty allows any target branch, another
+        target fails the run
         (env ANUBIS_ALLOWED_TARGET_BRANCH)
   -log-level string
         log level: debug, info, warn, error (default "info")
@@ -269,11 +271,12 @@ Environment:
         pull request proposes, read from whatever repository that branch lives
         in (a fork included). A directory with at least one valid *.md replaces
         the built-in specialists; ` + masterAgentFile + ` there overrides the
-        coordinator.
+        coordinator. It is a hard requirement: if the agents cannot be loaded the
+        run fails rather than fall back to the built-ins.
   ANUBIS_ALLOWED_TARGET_BRANCH
         restrict those custom agents to pull requests that target this branch
         (the base branch: main, development, staging ...). Empty allows any
-        target branch.
+        target branch; a pull request targeting another branch fails the run.
 
 Examples:
   anubis -repo owner/name -pr 42
