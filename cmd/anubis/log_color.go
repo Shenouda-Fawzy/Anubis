@@ -98,7 +98,7 @@ func colorLevel(s string) string {
 	}
 	lvl := strings.Trim(s[i+len("level="):j], `"`)
 	color, ok := levelColor[lvl]
-	if !ok {
+	if ok == false {
 		return s
 	}
 	return s[:i] + color + s[i:j] + ansiReset + s[j:]

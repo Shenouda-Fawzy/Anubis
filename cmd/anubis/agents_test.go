@@ -80,7 +80,7 @@ func TestParseAgentCardHandlesCRLFAndQuotes(t *testing.T) {
 	if card.Description != "quoted focus" {
 		t.Errorf("Description = %q, want the unquoted value", card.Description)
 	}
-	if !strings.Contains(card.SystemPrompt, "Body here.") {
+	if strings.Contains(card.SystemPrompt, "Body here.") == false {
 		t.Errorf("SystemPrompt = %q, want the CRLF body", card.SystemPrompt)
 	}
 }
@@ -92,7 +92,7 @@ func TestParseAgentCardBodyWithoutClosingFence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseAgentCard() error = %v", err)
 	}
-	if !strings.Contains(card.SystemPrompt, "This is a body") {
+	if strings.Contains(card.SystemPrompt, "This is a body") == false {
 		t.Errorf("SystemPrompt = %q, want the body preserved", card.SystemPrompt)
 	}
 }
@@ -167,7 +167,7 @@ func (m *agentMockGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.Contains(r.URL.Path, contents+"/"):
 		name := r.URL.Path[strings.Index(r.URL.Path, contents)+len(contents)+1:]
 		content, ok := m.files[name]
-		if !ok {
+		if ok == false {
 			writeTestJSON(w, http.StatusNotFound, map[string]any{"message": "Not Found"})
 			return
 		}
@@ -388,7 +388,7 @@ func TestLoadAgentSetReadsFromForkRepository(t *testing.T) {
 			t.Errorf("request read from the repository under review: %q", p)
 		}
 	}
-	if !readFromFork {
+	if readFromFork == false {
 		t.Errorf("no contents request to the fork; paths = %v", mock.requestedPaths())
 	}
 }
@@ -486,7 +486,7 @@ func TestSelectAgentsReplacesBuiltins(t *testing.T) {
 	custom := []*AgentCard{{Name: "docs", Description: "d", SystemPrompt: "p"}}
 
 	agents, replaced := extractAgents(custom, llm)
-	if !replaced {
+	if replaced == false {
 		t.Error("replaced = false, want true when custom agents exist")
 	}
 	if len(agents) != 1 || agents[0].Name != "docs" {

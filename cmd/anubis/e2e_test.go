@@ -206,7 +206,7 @@ func (m *mockGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case len(parts) == 6 && parts[0] == "repos" && parts[3] == "contents" && r.Method == http.MethodGet:
 		name := parts[5]
 		body, ok := agentFiles[name]
-		if !ok {
+		if ok == false {
 			http.NotFound(w, r)
 			return
 		}
@@ -511,7 +511,7 @@ func TestE2ECustomAgents(t *testing.T) {
 		t.Fatalf("comments posted = %d, want 1", len(comments))
 	}
 	for _, want := range []string{e2eFinalReview, agentsDir + "/", masterAgentFile} {
-		if !strings.Contains(comments[0], want) {
+		if strings.Contains(comments[0], want) == false {
 			t.Errorf("comment does not mention %q:\n%s", want, comments[0])
 		}
 	}
@@ -551,7 +551,7 @@ func TestE2ECustomAgentsRestrictedToTargetBranch(t *testing.T) {
 	if got := len(h.github.commentBodies()); got != 0 {
 		t.Errorf("comments posted = %d, want 0 on a refused custom-agent run", got)
 	}
-	if !strings.Contains(out, "allowed") {
+	if strings.Contains(out, "allowed") == false {
 		t.Errorf("output does not explain the target-branch refusal:\n%s", out)
 	}
 }
@@ -583,7 +583,7 @@ func TestE2ECustomAgentsMissingDirectoryFails(t *testing.T) {
 	if got := len(h.github.commentBodies()); got != 0 {
 		t.Errorf("comments posted = %d, want 0 when no custom agents exist", got)
 	}
-	if !strings.Contains(out, agentsDir) {
+	if strings.Contains(out, agentsDir) == false {
 		t.Errorf("output does not mention %s:\n%s", agentsDir, out)
 	}
 }
@@ -647,7 +647,7 @@ func TestE2ECustomAgentsAllowedForTargetBranch(t *testing.T) {
 	if len(comments) != 1 {
 		t.Fatalf("comments posted = %d, want 1", len(comments))
 	}
-	if !strings.Contains(comments[0], agentsDir+"/") {
+	if strings.Contains(comments[0], agentsDir+"/") == false {
 		t.Errorf("comment does not disclose the custom agents:\n%s", comments[0])
 	}
 }
@@ -691,7 +691,7 @@ func TestE2ECustomAgentsFromFork(t *testing.T) {
 	if len(comments) != 1 {
 		t.Fatalf("comments posted = %d, want 1", len(comments))
 	}
-	if !strings.Contains(comments[0], agentsDir+"/") {
+	if strings.Contains(comments[0], agentsDir+"/") == false {
 		t.Errorf("comment does not disclose the custom agents:\n%s", comments[0])
 	}
 }

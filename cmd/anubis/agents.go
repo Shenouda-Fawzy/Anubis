@@ -199,7 +199,7 @@ func parseFrontMatter(front string) (name, description, model string) {
 			continue
 		}
 		key, value, found := strings.Cut(line, ":")
-		if !found {
+		if found == false {
 			continue
 		}
 		value = trimQuotes(strings.TrimSpace(value))

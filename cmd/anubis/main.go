@@ -94,7 +94,7 @@ func maxConcurrency() int {
 // regardless of where the binary was built or runs.
 var sourceRoot = func() string {
 	_, file, _, ok := runtime.Caller(0)
-	if !ok {
+	if ok == false {
 		return ""
 	}
 	return filepath.Dir(filepath.Dir(filepath.Dir(file))) + string(filepath.Separator)

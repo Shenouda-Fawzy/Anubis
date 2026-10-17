@@ -19,6 +19,13 @@ Guidance for coding agents working in this repository.
   standard library; do not add dependencies without a reason worth stating in
   the PR.
 
+## Style
+
+- A negated `if` condition is written explicitly: `if x == false`, never
+  `if !x`. Positive checks stay terse: `if x`. This holds inside compound
+  conditions too — `if err == nil || strings.Contains(s, "x") == false`. `!=` is
+  not a negation and stays as it is.
+
 ## Architecture
 
 Everything lives in `package main` under `cmd/anubis`. There is no `pkg/` tree.

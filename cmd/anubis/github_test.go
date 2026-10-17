@@ -100,10 +100,10 @@ func TestEnterpriseDiffPathKeepsPrefix(t *testing.T) {
 	if want := "/api/v3/repos/octo/repo/pulls/18"; gotPath != want {
 		t.Errorf("request path = %q, want %q", gotPath, want)
 	}
-	if !strings.Contains(gotAccept, "diff") {
+	if strings.Contains(gotAccept, "diff") == false {
 		t.Errorf("Accept = %q, want it to request the diff media type", gotAccept)
 	}
-	if !strings.HasPrefix(diff, "diff --git") {
+	if strings.HasPrefix(diff, "diff --git") == false {
 		t.Errorf("GetDiff() = %q, want the raw diff", diff)
 	}
 }
