@@ -41,8 +41,8 @@ model*. Do not point the default at a repository with code you would not
 publish. Set `anubis-llm-base-url` to a self-hosted endpoint to keep the diff
 inside your own infrastructure.
 
-See [Where your diff goes](docs/providers.md#where-your-diff-goes) for the
-details and the mitigation.
+See [Providers](docs/providers.md) for the base URLs to point at, including
+self-hosted endpoints that keep the diff in your own infrastructure.
 
 ## Threat model
 

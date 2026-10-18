@@ -36,7 +36,7 @@ assumed from the "OpenAI-compatible" label. Where a provider's documentation did
 | **SambaNova** | `https://api.sambanova.ai/v1` | |
 | **DeepInfra** | `https://api.deepinfra.com/v1/openai` | Note the `/openai` path segment. |
 | **Hugging Face** | `https://router.huggingface.co/v1` | Inference Providers router. The key is a Hugging Face access token. |
-| **Perplexity** | `https://api.perplexity.ai` | **No `/v1`.** Only the Sonar chat models are chat-completions compatible. |
+| **Perplexity** | `https://api.perplexity.ai/router/v1` | The Orchestrator API: OpenAI chat-completions for open-weight models. Sonar's old `/chat/completions` still answers, but Perplexity is steering it to its Responses-shaped Agent API, which Anubis cannot speak. |
 | **Scaleway** | `https://api.scaleway.ai/v1` | Managed Generative APIs. Dedicated deployments use a per-deployment host instead. |
 | **Cloudflare Workers AI** | `https://api.cloudflare.com/client/v4/accounts/<account-id>/ai/v1` | Your account ID is part of the path, so this one cannot be a fixed constant. |
 
@@ -129,7 +129,7 @@ raise the window:
 
 | Server | How to raise it |
 | --- | --- |
-| Ollama | `PARAMETER num_ctx` in a Modelfile. Ollama has no API parameter for this. |
+| Ollama | `OLLAMA_CONTEXT_LENGTH` (default 4096), or `PARAMETER num_ctx` in a Modelfile. |
 | llama.cpp | `-c <tokens>` |
 | vLLM | `--max-model-len` |
 | LM Studio | The context length loaded with the model |
@@ -140,10 +140,15 @@ not expect on a normal completion. DeepSeek can return `length`,
 returning `content_filter` on a security review is plausible, since that is
 exactly the kind of prompt that trips one.
 
+A review is also several calls: one per specialist plus one synthesis call —
+**five** for the four built-in specialists, more once a repository supplies its
+own (up to 16). A provider's rate limit, or your budget, is the usual ceiling,
+and `anubis-max-concurrency` decides how fast those calls are spent.
+
 ## Building the URL
 
 `anubis-llm-base-url` is used as-is unless it already ends in `/chat/completions`,
-which case nothing is appended. All of these are equivalent:
+in which case nothing is appended. All of these are equivalent:
 
 ```text
 https://opencode.ai/zen/v1                  -> .../v1/chat/completions
@@ -157,46 +162,19 @@ Groq and Perplexity all need one that a guess would miss.
 
 ## OpenCode Zen model routing
 
-Zen routes **per model**, so a model being listed in Zen is not enough. Check the
-model you want against
-[OpenCode's endpoint table](https://opencode.ai/docs/zen/#endpoints):
-
-| Model family on Zen | Endpoint | Works with Anubis |
-| --- | --- | --- |
-| `big-pickle`, `qwen3.8-max`, `deepseek-v4*`, `glm-*`, `kimi-*`, `minimax-*` | `/zen/v1/chat/completions` | Yes |
-| `gpt-*`, `grok-*`, `muse-spark-*` | `/zen/v1/responses` | No |
-| `claude-*`, `qwen3.*-flash/plus` | `/zen/v1/messages` | No |
-| `gemini-*` | `/zen/v1/models/<id>` | No |
-
-Selecting a model from a row marked **No** fails, because the request goes to
-`/chat/completions` and that model is not served there. The failure names the
-HTTP status, so the cause is visible in the log.
-
-## Cost
-
-A review is one call per specialist plus one synthesis call: **five calls**.
-
-`big-pickle` is currently free on Zen. Zen also **auto-reloads $20 when a
-balance drops below $5**, and that is on by default. Free models will not
-trigger it, but if you switch `model` to a paid one, confirm your Zen auto-reload
-setting first.
+Zen is the default, and it is the one provider where the base URL is not the
+whole answer: it routes **per model**, serving `chat/completions` for some models
+and a different protocol for others. Pick a model that Zen serves on
+`chat/completions` — check it against
+[OpenCode's endpoint table](https://opencode.ai/docs/zen/#endpoints) before
+setting `model`. A model served elsewhere is not reachable from Anubis, though
+the failure names the HTTP status, so the cause is visible in the log.
 
 ## Where your diff goes
 
-By default Anubis sends the pull-request title, description and **the entire
-diff** to OpenCode Zen's `big-pickle` model at `https://opencode.ai/zen/v1`.
-That is your source code leaving your infrastructure.
-
-**The default model is not zero-retention.** OpenCode's privacy policy states
-that during the model's free period, submitted data *may be used to improve the
-model*. `big-pickle` is a free "stealth" model, so out of the box your diffs can
-be used for model improvement. Do not point the default at a repository with
-code you would not publish.
-
-To keep the diff inside your own infrastructure, set `anubis-llm-base-url` to a
-self-hosted OpenAI-compatible endpoint such as Ollama or vLLM, and verify that
-provider's terms yourself. Anubis makes no claims about any provider's data
-handling beyond what that provider publishes.
-
-This is separate from the model output itself, which is also untrusted. See
-[SECURITY.md](../SECURITY.md) for the full threat model.
+The diff leaves your infrastructure for the configured endpoint — out of the box,
+OpenCode Zen's `big-pickle`, which is **not zero-retention**. Set
+`anubis-llm-base-url` to a self-hosted endpoint to keep it in-house.
+[SECURITY.md](../SECURITY.md) discloses exactly what is sent and carries the rest
+of the threat model. Anubis makes no claims about any provider's data handling
+beyond what that provider publishes.

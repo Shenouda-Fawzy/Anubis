@@ -89,7 +89,7 @@ provider is a URL and a key. No adapter, no code change:
 | SambaNova | `https://api.sambanova.ai/v1` |
 | DeepInfra | `https://api.deepinfra.com/v1/openai` |
 | Hugging Face | `https://router.huggingface.co/v1` |
-| Perplexity | `https://api.perplexity.ai` |
+| Perplexity | `https://api.perplexity.ai/router/v1` |
 | Scaleway | `https://api.scaleway.ai/v1` |
 | Ollama *(local)* | `http://localhost:11434/v1` |
 | vLLM, LM Studio, llama.cpp, LiteLLM, LocalAI | see [Providers](docs/providers.md#self-hosted-and-local) |
