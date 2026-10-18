@@ -23,6 +23,8 @@ jobs:
       - uses: Shenouda-Fawzy/Anubis@v1
         with:
           anubis-llm-api-key: ${{ secrets.ANUBIS_LLM_API_KEY }}
+          anubis-llm-base-url: <URL> # like: https://generativelanguage.googleapis.com/v1beta/openai
+          anubis-llm-model: <preferred-llm-model> # like: gemini-3.6-flash
 ```
 
 You only need to add **one** secret, `ANUBIS_LLM_API_KEY`, holding your model provider's key
