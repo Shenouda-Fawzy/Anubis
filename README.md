@@ -4,7 +4,9 @@
 [![action version](https://img.shields.io/github/v/release/Shenouda-Fawzy/Anubis?label=action%20v1)](https://github.com/Shenouda-Fawzy/Anubis/releases/latest)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Anubis is a Github action (_and cli_) you can use it to review you and your team's PR.  
+Anubis is a Github action (_and cli_) you can use it to review you and your team's PR. It ships with
+four built-in reviewer specialists plus a master reviewer to ensure code quality, security, performance
+and maintainability.
 
 ## As an action
 
@@ -30,7 +32,15 @@ jobs:
 You only need to add **one** secret, `ANUBIS_LLM_API_KEY`, holding your model provider's key
    (Settings → Secrets and variables → Actions).
 
-See **[`examples/anubis.yml`](examples/anubis.yml) is the complete configuration** —
+**You don't like the built-in specialists?** No problem: create a `.anubis-agents` directory at the
+root of your repo and define your own agent specialists (each a `*.md` file with optional front
+matter for `name`, `description` and `model`). One special file, `master-agent.md`, defines the
+master agent that runs after all the specialists to help deduplicate the findings. Turn the feature
+on with the `anubis-agents: 'true'`.
+See [`docs/behavior.md`](docs/behavior.md#custom-agents) for the full behavior.
+
+See [`examples/vuln-hunter.md`](examples/vuln-hunter.md) for an example specialist agent, and
+[`examples/anubis.yml`](examples/anubis.yml) for the complete configuration.
 
 
 ## As a CLI
